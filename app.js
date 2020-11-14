@@ -27,33 +27,49 @@ function newMesh(name, geom, matParams) {
   material[name] = mat;
 
   let m = new e3.Mesh(geom, mat);
-  scene.add(m);
   mesh[name] = m;
   m.name = name;
 
   return m;
 }
 
-newMesh('plane', 'Plane', { color: 0x33ff33, side: e3.DoubleSide });
+scene.add(newMesh('plane', 'Plane', { color: 0x33ff33, side: e3.DoubleSide }));
 
 mesh.plane.scale.set(10,10,10);
-mesh.plane.rotateX(deg(-90));
+mesh.plane.rotateX(deg(-90)); // X,Y in plane
 mesh.plane.translateZ(-1);
 
-newMesh('line', 'Cylinder', { color: 0xff0000 });
+function newArrow(name, color, thickness=0.02) {
+  let shaft = newMesh(name+'_shaft', 'Cylinder', { color });
 
-mesh.line.rotateZ(deg(90));
-mesh.line.scale.set(0.05, 0.9, 0.05);
-mesh.line.translateY(0.5);
+  shaft.scale.set(thickness, 0.9, thickness);
+  shaft.translateY(0.45);
 
-newMesh('cone', 'Cone', { color: 0xff0000 });
+  let tip = newMesh(name+'_tip', 'Cone', { color });
 
-mesh.cone.rotateZ(deg(90));
-mesh.cone.scale.set(0.1, 0.1, 0.1);
-mesh.cone.translateY(0.95);
+  tip.scale.set(thickness*2, 0.1, thickness*2);
+  tip.translateY(0.95);
 
-newMesh('sphere', new e3.SphereBufferGeometry(1, 32, 32),
-  { color: 0xaaaaaa, transparent: true, opacity: 0.5 });
+  arrow = new e3.Group();
+  arrow.name = name;
+  arrow.add(shaft); arrow.add(tip);
+
+  return arrow;
+}
+
+arrow1 = newArrow('arrow1', 0xff0000);
+arrow1.rotateZ(deg(90));
+scene.add(arrow1);
+
+arrow2 = newArrow('arrow2', 0x00ff00);
+arrow2.rotateX(deg(90));
+scene.add(arrow2);
+
+arrow3 = newArrow('arrow3', 0x0000ff);
+scene.add(arrow3);
+
+scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 32, 32),
+  { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
 
 camera.position.set(-1.5,1,-1.5);
 tmp = v(); mesh.sphere.getWorldPosition(tmp);
@@ -62,7 +78,7 @@ camera.lookAt(tmp);
 directionalLight = new e3.DirectionalLight(0xffffff, 1);
 scene.add(directionalLight);
 
-ambientLight = new e3.AmbientLight(0x222222);
+ambientLight = new e3.AmbientLight(0x333333);
 scene.add(ambientLight);
 
 function r() {
