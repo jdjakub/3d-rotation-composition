@@ -2,6 +2,7 @@ e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
 turn = frac => 2*Math.PI * frac;
 deg = degs => turn(degs/360);
+xtoz = angle => v(Math.cos(angle), 0, Math.sin(angle));
 
 renderer = new e3.WebGLRenderer({ antialias: true });
 document.body.appendChild(renderer.domElement);
@@ -124,6 +125,8 @@ updates.set(a_x_b, function(arr) {
   a.cross(b);
   pointArrow(arr, a);
 });
+
+viz = degs => r(changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)))))
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
