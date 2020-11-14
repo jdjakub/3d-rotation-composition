@@ -88,19 +88,42 @@ function pointArrow(arrow, target) {
   let delta = v(); arrow.getWorldPosition(delta); delta.sub(target); delta.negate();
   arrow.lookAt(target);
   arrowLength(arrow, delta.length());
+  arrow.updateMatrixWorld();
 }
 
-arrow1 = newArrow('arrow1', 0xff0000, v(1,0,0)); // world X
-scene.add(arrow1);
+axis_a = newArrow('axis_a', 0xff0000, v(1,0,0)); // world X
+scene.add(axis_a);
 
-arrow2 = newArrow('arrow2', 0x00ff00, v(0,1,0)); // world Y
-scene.add(arrow2);
+axis_b = newArrow('axis_b', 0xff7700, v(0,0,1)); // world Z
+scene.add(axis_b);
 
-arrow3 = newArrow('arrow3', 0x0000ff, v(0,0,1)); // world Z
-scene.add(arrow3);
+dependents = new Map();
+updates = new Map();
 
-arrow4 = newArrow('arrow4', 0xffff00, v(0,1,-1));
-scene.add(arrow4);
+function changed(obj) {
+  let deps = dependents.get(obj);
+  if (deps) {
+    deps.forEach(d => {
+      let update = updates.get(d);
+      if (update) {
+        update(d);
+        changed(d);
+      }
+    });
+  }
+}
+
+a_x_b = newArrow('a_x_b', 0xffff00, v(0,-1,0));
+scene.add(a_x_b);
+dependents.set(axis_a, new Set([a_x_b]));
+dependents.set(axis_b, new Set([a_x_b]));
+
+updates.set(a_x_b, function(arr) {
+  let a = v(0,0,1); axis_a.localToWorld(a);
+  let b = v(0,0,1); axis_b.localToWorld(b);
+  a.cross(b);
+  pointArrow(arr, a);
+});
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
