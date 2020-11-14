@@ -41,11 +41,13 @@ mesh.plane.translateZ(-1);
 
 function newArrow(name, color, thickness=0.02) {
   let shaft = newMesh(name+'_shaft', 'Cylinder', { color });
+  let tip = newMesh(name+'_tip', 'Cone', { color });
+
+  shaft.rotateX(deg(90)); // parent's -Z = its Y
+  tip.rotateX(deg(90)); // so we can use lookAt()
 
   shaft.scale.set(thickness, 0.9, thickness);
   shaft.translateY(0.45);
-
-  let tip = newMesh(name+'_tip', 'Cone', { color });
 
   tip.scale.set(thickness*2, 0.1, thickness*2);
   tip.translateY(0.95);
@@ -58,20 +60,21 @@ function newArrow(name, color, thickness=0.02) {
 }
 
 arrow1 = newArrow('arrow1', 0xff0000);
-arrow1.rotateZ(deg(90));
+arrow1.lookAt(v(1,0,0)); // world X
 scene.add(arrow1);
 
 arrow2 = newArrow('arrow2', 0x00ff00);
-arrow2.rotateX(deg(90));
+arrow2.lookAt(v(0,1,0)); // world Y
 scene.add(arrow2);
 
 arrow3 = newArrow('arrow3', 0x0000ff);
+arrow3.lookAt(v(0,0,1)); // world Z
 scene.add(arrow3);
 
-scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 32, 32),
+scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
 
-camera.position.set(-1.5,1,-1.5);
+camera.position.set(1.5,1,1.5);
 tmp = v(); mesh.sphere.getWorldPosition(tmp);
 camera.lookAt(tmp);
 
