@@ -14,40 +14,49 @@ camera = new THREE.PerspectiveCamera(75, // Field-of-view
                                      0.0001, 1000); // Near / far plane distance
 scene.add(camera);
 
-pg = new e3.PlaneBufferGeometry();
-pm = new e3.MeshLambertMaterial({ color: 0x33ff33, side: e3.DoubleSide });
-plane = new e3.Mesh(pg, pm);
-scene.add(plane);
+geometry = {};
+material = {};
+mesh = {}
 
-plane.scale.set(10,10,10);
-plane.rotateX(deg(-90));
-plane.translateZ(-1);
+function newMesh(name, geom, matParams) {
+  if (typeof geom === 'string')
+    geom = new e3[geom+'BufferGeometry']();
+  geometry[name] = geom;
 
-lg = new e3.CylinderBufferGeometry();
-lm = new e3.MeshLambertMaterial({ color: 0xff0000 });
-line = new e3.Mesh(lg, lm);
-scene.add(line);
+  let mat = new e3.MeshLambertMaterial(matParams);
+  material[name] = mat;
 
-line.rotateZ(deg(90));
-line.scale.set(0.05, 0.9, 0.05);
-line.translateY(0.5);
+  let m = new e3.Mesh(geom, mat);
+  scene.add(m);
+  mesh[name] = m;
+  m.name = name;
 
-cg = new e3.ConeBufferGeometry();
-cm = new e3.MeshLambertMaterial({ color: 0xff0000 });
-cone = new e3.Mesh(cg, cm);
-scene.add(cone);
+  return m;
+}
 
-cone.rotateZ(deg(90));
-cone.scale.set(0.1, 0.1, 0.1);
-cone.translateY(0.95);
+newMesh('plane', 'Plane', { color: 0x33ff33, side: e3.DoubleSide });
 
-geometry = new e3.SphereBufferGeometry(1, 32, 32);
-material = new e3.MeshLambertMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 });
-sphere = new e3.Mesh(geometry, material);
-scene.add(sphere);
+mesh.plane.scale.set(10,10,10);
+mesh.plane.rotateX(deg(-90));
+mesh.plane.translateZ(-1);
+
+newMesh('line', 'Cylinder', { color: 0xff0000 });
+
+mesh.line.rotateZ(deg(90));
+mesh.line.scale.set(0.05, 0.9, 0.05);
+mesh.line.translateY(0.5);
+
+newMesh('cone', 'Cone', { color: 0xff0000 });
+
+mesh.cone.rotateZ(deg(90));
+mesh.cone.scale.set(0.1, 0.1, 0.1);
+mesh.cone.translateY(0.95);
+
+newMesh('sphere', new e3.SphereBufferGeometry(1, 32, 32),
+  { color: 0xaaaaaa, transparent: true, opacity: 0.5 });
 
 camera.position.set(-1.5,1,-1.5);
-tmp = v(); sphere.getWorldPosition(tmp);
+tmp = v(); mesh.sphere.getWorldPosition(tmp);
 camera.lookAt(tmp);
 
 directionalLight = new e3.DirectionalLight(0xffffff, 1);
