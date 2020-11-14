@@ -43,33 +43,63 @@ function newArrow(name, color, thickness=0.02) {
   let shaft = newMesh(name+'_shaft', 'Cylinder', { color });
   let tip = newMesh(name+'_tip', 'Cone', { color });
 
-  shaft.rotateX(deg(90)); // parent's -Z = its Y
-  tip.rotateX(deg(90)); // so we can use lookAt()
+  // want to use lookAt() to orient lines
+  // lookAt() aims +z towards target (or -z for a camera)
+  // but cone and cyl geometries point along their Y axis (why!?)
+  // So, we rotate all vertices (expensive operation) Y->Z
+  // i.e. afterwards, geom +Z is "forwards" (as it should be(!))
+  shaft.geometry.rotateX(deg(90));
+  tip.geometry.rotateX(deg(90));
 
-  shaft.scale.set(thickness, 0.9, thickness);
-  shaft.translateY(0.45);
+  // Next, geom vertices are *centered* at (0,0,0)
+  // however, for "pointing" lines and cones, it's nicer to have
+  // one end of line or the base of the cone as the "origin"
+  // So, we move vertices forwards by half length
+  // now, scaling will work from one endpoint instead of the center
+  shaft.geometry.translate(0, 0, 0.5);
+  tip.geometry.translate(0, 0, 0.5);
 
-  tip.scale.set(thickness*2, 0.1, thickness*2);
-  tip.translateY(0.95);
+  shaft.scale.set(thickness, thickness, 0.9);
+
+  tip.scale.set(thickness*2, thickness*2, 0.1);
+  tip.translateZ(0.9);
 
   arrow = new e3.Group();
   arrow.name = name;
+  arrow.arrowShaft = shaft;
+  arrow.arrowTip = tip;
   arrow.add(shaft); arrow.add(tip);
 
   return arrow;
 }
 
+function arrowLength(arrow, length) {
+  arrow.arrowShaft.scale.setComponent(2, length-0.1);
+  let zTip = v(0,0,1); zTip.applyQuaternion(arrow.arrowTip.quaternion);
+  arrow.arrowTip.position.copy(zTip.multiplyScalar(length-0.1));
+}
+
+function pointArrow(arrow, target) {
+  let delta = v(); arrow.getWorldPosition(delta); delta.sub(target); delta.negate();
+  arrow.lookAt(target);
+  arrowLength(arrow, delta.length());
+}
+
 arrow1 = newArrow('arrow1', 0xff0000);
-arrow1.lookAt(v(1,0,0)); // world X
+pointArrow(arrow1, v(1,0,0)); // world X
 scene.add(arrow1);
 
 arrow2 = newArrow('arrow2', 0x00ff00);
-arrow2.lookAt(v(0,1,0)); // world Y
+pointArrow(arrow2, v(0,1,0)); // world Y
 scene.add(arrow2);
 
 arrow3 = newArrow('arrow3', 0x0000ff);
-arrow3.lookAt(v(0,0,1)); // world Z
+pointArrow(arrow3, v(0,0,1)); // world Z
 scene.add(arrow3);
+
+arrow4 = newArrow('arrow4', 0xffff00);
+pointArrow(arrow4, v(0,1,-1));
+scene.add(arrow4);
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
