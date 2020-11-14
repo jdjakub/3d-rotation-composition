@@ -7,6 +7,7 @@ renderer = new e3.WebGLRenderer({ antialias: true });
 document.body.appendChild(renderer.domElement);
 renderer.setSize(window.innerWidth*.99, window.innerHeight*.99);
 renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.setClearColor(new e3.Color(0x05befc));
 
 scene = new e3.Scene();
 camera = new THREE.PerspectiveCamera(75, // Field-of-view
@@ -33,13 +34,14 @@ function newMesh(name, geom, matParams) {
   return m;
 }
 
-scene.add(newMesh('plane', 'Plane', { color: 0x33ff33, side: e3.DoubleSide }));
+scene.add(newMesh('plane', 'Plane', { color: 0x43a33c, side: e3.DoubleSide }));
 
 mesh.plane.scale.set(10,10,10);
 mesh.plane.rotateX(deg(-90)); // X,Y in plane
 mesh.plane.translateZ(-1);
 
-function newArrow(name, color, thickness=0.02) {
+thickness=0.02;
+function newArrow(name, color, target, origin) {
   let shaft = newMesh(name+'_shaft', 'Cylinder', { color });
   let tip = newMesh(name+'_tip', 'Cone', { color });
 
@@ -70,6 +72,9 @@ function newArrow(name, color, thickness=0.02) {
   arrow.arrowTip = tip;
   arrow.add(shaft); arrow.add(tip);
 
+  if (origin) arrow.setWorldPosition(origin);
+  if (target) pointArrow(arrow, target);
+
   return arrow;
 }
 
@@ -85,20 +90,16 @@ function pointArrow(arrow, target) {
   arrowLength(arrow, delta.length());
 }
 
-arrow1 = newArrow('arrow1', 0xff0000);
-pointArrow(arrow1, v(1,0,0)); // world X
+arrow1 = newArrow('arrow1', 0xff0000, v(1,0,0)); // world X
 scene.add(arrow1);
 
-arrow2 = newArrow('arrow2', 0x00ff00);
-pointArrow(arrow2, v(0,1,0)); // world Y
+arrow2 = newArrow('arrow2', 0x00ff00, v(0,1,0)); // world Y
 scene.add(arrow2);
 
-arrow3 = newArrow('arrow3', 0x0000ff);
-pointArrow(arrow3, v(0,0,1)); // world Z
+arrow3 = newArrow('arrow3', 0x0000ff, v(0,0,1)); // world Z
 scene.add(arrow3);
 
-arrow4 = newArrow('arrow4', 0xffff00);
-pointArrow(arrow4, v(0,1,-1));
+arrow4 = newArrow('arrow4', 0xffff00, v(0,1,-1));
 scene.add(arrow4);
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
@@ -109,6 +110,7 @@ tmp = v(); mesh.sphere.getWorldPosition(tmp);
 camera.lookAt(tmp);
 
 directionalLight = new e3.DirectionalLight(0xffffff, 1);
+directionalLight.position.copy(v(1,1,-1));
 scene.add(directionalLight);
 
 ambientLight = new e3.AmbientLight(0x333333);
