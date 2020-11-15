@@ -159,11 +159,37 @@ scene.add(a_p_b);
 dependents.get(axis_a).add(a_p_b);
 dependents.get(axis_b).add(a_p_b);
 
+paths = {};
+
 updates.set(a_p_b, function(arr) {
   let a = asVector(axis_a);
   let b = asVector(axis_b);
   pointArrow(arr, a.add(b));
+  tracePath('p_path', a, 0xff7700, 120);
 });
+
+function tracePath(name, currPos, color, pathLen) {
+  if (paths[name] === undefined) paths[name] = [];
+  let vertices = paths[name];
+  if (vertices instanceof Array) { // if still adding vertices
+    if (vertices.length < pathLen) {
+      let prevPos = final(vertices);
+      if (prevPos !== undefined) {
+        prevPos = v(...prevPos);
+        if (prevPos.distanceTo(currPos) < 0.04) return;
+      }
+      vertices.push([currPos.x, currPos.y, currPos.z]);
+    } else {
+      paths[name] = new e3.Points( // replace with Object3D
+        new e3.BufferGeometry().setAttribute('position',
+          new e3.Float32BufferAttribute(vertices.flat(), 3),
+        ),
+        new e3.PointsMaterial({ color, size: 0.025 }),
+      );
+      scene.add(paths[name]);
+    }
+  }
+}
 
 axis_c = newArrow('axis_c', 0x00ff00);
 arrowThickness(axis_c, 0.025);
@@ -171,32 +197,12 @@ scene.add(axis_c);
 dependents.set(a_x_b, new Set([axis_c]));
 dependents.set(a_p_b, new Set([axis_c]));
 
-c_path_vertices = [];
-c_path = undefined;
-
 updates.set(axis_c, function(arr) {
   let x = asVector(a_x_b);
   let p = asVector(a_p_b);
   x.add(p);
   pointArrow(arr, x.multiplyScalar(0.5));
-
-  // Trace path
-  if (c_path_vertices.length < 80) {
-    let prev = final(c_path_vertices);
-    if (prev !== undefined) {
-      prev = v(...prev);
-      if (prev.distanceTo(x) < 0.04) return;
-    }
-    c_path_vertices.push([x.x, x.y, x.z]);
-  } else if (c_path === undefined) {
-    c_path = new e3.Points(
-      new e3.BufferGeometry().setAttribute('position',
-        new e3.Float32BufferAttribute(c_path_vertices.flat(), 3),
-      ),
-      new e3.PointsMaterial({ color: 0x00ff00, size: 0.025 }),
-    );
-    scene.add(c_path);
-  }
+  tracePath('c_path', x, 0x00ff00, 80);
 });
 
 naxis_c = newArrow('naxis_c', 0x0000ff);
@@ -208,14 +214,13 @@ updates.set(naxis_c, function(arr) {
   pointArrow(arr, c.normalize());
 });
 
-viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs))));
-
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
 
 camera.position.set(1.5,1,1.5);
 tmp = v(); mesh.sphere.getWorldPosition(tmp);
 camera.lookAt(tmp);
+camera.translateZ(0.3);
 
 directionalLight = new e3.DirectionalLight(0xffffff, 1);
 directionalLight.position.copy(v(1,1,-1));
@@ -228,7 +233,16 @@ doAnimate = true;
 degPerS = 45;
 lastTimeMs = undefined;
 angle = 0;
-tick = deltaS => { viz(angle); angle += degPerS * deltaS; angle = angle % 360; };
+
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs))));
+
+function tick(deltaS) {
+  viz(angle);
+  tracePath('b_path', asVector(axis_b), 0xff0000, 120);
+  angle += degPerS * deltaS;
+  angle = angle % 360;
+
+}
 
 function r() {
   let timeMs = performance.now();
