@@ -1,4 +1,5 @@
 log = (...args) => { console.log(...args); return args ? args[0] : undefined };
+final = arr => arr[arr.length-1]
 e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
 turn = frac => 2*Math.PI * frac;
@@ -170,11 +171,32 @@ scene.add(axis_c);
 dependents.set(a_x_b, new Set([axis_c]));
 dependents.set(a_p_b, new Set([axis_c]));
 
+c_path_vertices = [];
+c_path = undefined;
+
 updates.set(axis_c, function(arr) {
   let x = asVector(a_x_b);
   let p = asVector(a_p_b);
   x.add(p);
   pointArrow(arr, x.multiplyScalar(0.5));
+
+  // Trace path
+  if (c_path_vertices.length < 80) {
+    let prev = final(c_path_vertices);
+    if (prev !== undefined) {
+      prev = v(...prev);
+      if (prev.distanceTo(x) < 0.04) return;
+    }
+    c_path_vertices.push([x.x, x.y, x.z]);
+  } else if (c_path === undefined) {
+    c_path = new e3.Points(
+      new e3.BufferGeometry().setAttribute('position',
+        new e3.Float32BufferAttribute(c_path_vertices.flat(), 3),
+      ),
+      new e3.PointsMaterial({ color: 0x00ff00, size: 0.025 }),
+    );
+    scene.add(c_path);
+  }
 });
 
 naxis_c = newArrow('naxis_c', 0x0000ff);
