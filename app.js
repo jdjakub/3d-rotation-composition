@@ -125,19 +125,6 @@ function asVector(arrow) {
   return target;
 }
 
-angle_a = deg(90);
-angle_b = deg(90);
-s_a2 = Math.sin(angle_a/2);
-s_b2 = Math.sin(angle_b/2);
-c_a2 = Math.cos(angle_a/2);
-c_b2 = Math.cos(angle_b/2);
-
-axis_a = newArrow('axis_a', 0xff0000, v(s_a2,0,0)); // world X
-scene.add(axis_a);
-
-axis_b = newArrow('axis_b', 0xff0000, v(0,0,s_b2)); // world Z
-scene.add(axis_b);
-
 // ### CHANGE TRACKING
 
 dependents = new Map();
@@ -159,7 +146,48 @@ function changed(obj) {
   }
 }
 
-a_x_b = newArrow('a_x_b', 0xffff00, v(0,-s_a2*s_b2,0));
+// ### ANGLES AND AXES SETUP
+
+angle_a = [deg(90)];
+angle_b = [deg(90)];
+s_a2 = [Math.sin(angle_a[0]/2)];
+s_b2 = [Math.sin(angle_b[0]/2)];
+c_a2 = [Math.cos(angle_a[0]/2)];
+c_b2 = [Math.cos(angle_b[0]/2)];
+
+dependents.set(angle_a, new Set([s_a2, c_a2]));
+dependents.set(angle_b, new Set([s_b2, c_b2]));
+
+updates.set(s_a2, function(angle) {
+  angle[0] = Math.sin(angle_a[0]/2);
+});
+updates.set(s_b2, function(angle) {
+  angle[0] = Math.sin(angle_b[0]/2);
+});
+updates.set(c_a2, function(angle) {
+  angle[0] = Math.cos(angle_a[0]/2);
+});
+updates.set(c_b2, function(angle) {
+  angle[0] = Math.cos(angle_b[0]/2);
+});
+
+axis_a = newArrow('axis_a', 0xff0000, v(s_a2[0],0,0)); // world X
+scene.add(axis_a);
+dependents.set(s_a2, new Set([axis_a]));
+
+updates.set(axis_a, function(arr) {
+  arrowLength(arr, s_a2[0]);
+});
+
+axis_b = newArrow('axis_b', 0xff0000, v(0,0,s_b2[0])); // world Z
+scene.add(axis_b);
+dependents.set(s_b2, new Set([axis_b]));
+
+updates.set(axis_b, function(arr) {
+  arrowLength(arr, s_b2[0]);
+});
+
+a_x_b = newArrow('a_x_b', 0xffff00, v(0,-s_a2[0]*s_b2[0],0));
 scene.add(a_x_b);
 dependents.set(axis_a, new Set([a_x_b]));
 dependents.set(axis_b, new Set([a_x_b]));
@@ -175,6 +203,8 @@ a_p_b = newArrow('a_p_b', 0xff7700, v(1,0,1));
 scene.add(a_p_b);
 dependents.get(axis_a).add(a_p_b);
 dependents.get(axis_b).add(a_p_b);
+dependents.set(c_a2, new Set([a_p_b]));
+dependents.set(c_b2, new Set([a_p_b]));
 
 // ### PATH TRACING
 
@@ -258,14 +288,24 @@ degPerS = 45;
 lastTimeMs = undefined;
 angle = 0;
 
-viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2)));
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2[0])));
 
 function tick(deltaS) {
   viz(angle);
   tracePath('b_path', asVector(axis_b), 0xff0000, 120);
   angle += degPerS * deltaS;
   angle = angle % 360;
+}
 
+function retrace() {
+  Object.entries(paths).forEach(([k,p]) => {
+    if (!(p instanceof Array)) {
+      scene.remove(p);
+      p.geometry.dispose();
+      p.material.dispose();
+    }
+    paths[k] = undefined;
+  });
 }
 
 function r() {
