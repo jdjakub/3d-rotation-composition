@@ -1,3 +1,5 @@
+// ### UTILITIES
+
 log = (...args) => { console.log(...args); return args ? args[0] : undefined };
 final = arr => arr[arr.length-1]
 e3 = THREE;
@@ -5,6 +7,8 @@ v = (...args) => new e3.Vector3(...args);
 turn = frac => 2*Math.PI * frac;
 deg = degs => turn(degs/360);
 xtoz = angle => v(Math.cos(angle), 0, Math.sin(angle));
+
+// ### THREE.JS SETUP
 
 renderer = new e3.WebGLRenderer({ antialias: true });
 document.body.appendChild(renderer.domElement);
@@ -17,6 +21,8 @@ camera = new THREE.PerspectiveCamera(75, // Field-of-view
                                      window.innerWidth / window.innerHeight, // Aspect
                                      0.0001, 1000); // Near / far plane distance
 scene.add(camera);
+
+// ### GROUND PLANE
 
 geometry = {};
 material = {};
@@ -42,6 +48,8 @@ scene.add(newMesh('plane', 'Plane', { color: 0x43a33c, side: e3.DoubleSide }));
 mesh.plane.scale.set(10,10,10);
 mesh.plane.rotateX(deg(-90)); // X,Y in plane
 mesh.plane.translateZ(-1);
+
+// ### ARROW MANAGEMENT
 
 geometry.shaft = new e3.CylinderBufferGeometry();
 geometry.tip = new e3.ConeBufferGeometry();
@@ -117,11 +125,20 @@ function asVector(arrow) {
   return target;
 }
 
-axis_a = newArrow('axis_a', 0xff0000, v(1,0,0)); // world X
+angle_a = deg(90);
+angle_b = deg(90);
+s_a2 = Math.sin(angle_a/2);
+s_b2 = Math.sin(angle_b/2);
+c_a2 = Math.cos(angle_a/2);
+c_b2 = Math.cos(angle_b/2);
+
+axis_a = newArrow('axis_a', 0xff0000, v(s_a2,0,0)); // world X
 scene.add(axis_a);
 
-axis_b = newArrow('axis_b', 0xff0000, v(0,0,1)); // world Z
+axis_b = newArrow('axis_b', 0xff0000, v(0,0,s_b2)); // world Z
 scene.add(axis_b);
+
+// ### CHANGE TRACKING
 
 dependents = new Map();
 updates = new Map();
@@ -142,7 +159,7 @@ function changed(obj) {
   }
 }
 
-a_x_b = newArrow('a_x_b', 0xffff00, v(0,-1,0));
+a_x_b = newArrow('a_x_b', 0xffff00, v(0,-s_a2*s_b2,0));
 scene.add(a_x_b);
 dependents.set(axis_a, new Set([a_x_b]));
 dependents.set(axis_b, new Set([a_x_b]));
@@ -159,11 +176,13 @@ scene.add(a_p_b);
 dependents.get(axis_a).add(a_p_b);
 dependents.get(axis_b).add(a_p_b);
 
+// ### PATH TRACING
+
 paths = {};
 
 updates.set(a_p_b, function(arr) {
-  let a = asVector(axis_a);
-  let b = asVector(axis_b);
+  let a = asVector(axis_a).multiplyScalar(c_b2);
+  let b = asVector(axis_b).multiplyScalar(c_a2);
   pointArrow(arr, a.add(b));
   tracePath('p_path', a, 0xff7700, 120);
 });
@@ -201,7 +220,7 @@ updates.set(axis_c, function(arr) {
   let x = asVector(a_x_b);
   let p = asVector(a_p_b);
   x.add(p);
-  pointArrow(arr, x.multiplyScalar(0.5));
+  pointArrow(arr, x);
   tracePath('c_path', x, 0x00ff00, 80);
 });
 
@@ -212,7 +231,10 @@ dependents.set(axis_c, new Set([naxis_c]));
 updates.set(naxis_c, function(arr) {
   let c = asVector(axis_c);
   pointArrow(arr, c.normalize());
+  tracePath('path_nc', c, 0x0000ff, 80);
 });
+
+// ### SPHERE, CAMERA, LIGHTS
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
@@ -229,12 +251,14 @@ scene.add(directionalLight);
 ambientLight = new e3.AmbientLight(0x333333);
 scene.add(ambientLight);
 
+// ### ANIMATION
+
 doAnimate = true;
 degPerS = 45;
 lastTimeMs = undefined;
 angle = 0;
 
-viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs))));
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2)));
 
 function tick(deltaS) {
   viz(angle);
