@@ -42,30 +42,32 @@ mesh.plane.scale.set(10,10,10);
 mesh.plane.rotateX(deg(-90)); // X,Y in plane
 mesh.plane.translateZ(-1);
 
-thickness=0.02;
+geometry.shaft = new e3.CylinderBufferGeometry();
+geometry.tip = new e3.ConeBufferGeometry();
+
+// want to use lookAt() to orient lines
+// lookAt() aims +z towards target (or -z for a camera)
+// but cone and cyl geometries point along their Y axis (why!?)
+// So, we rotate all vertices (expensive operation) Y->Z
+// i.e. afterwards, geom +Z is "forwards" (as it should be(!))
+geometry.shaft.rotateX(deg(90));
+geometry.tip.rotateX(deg(90));
+
+// Next, geom vertices are *centered* at (0,0,0)
+// however, for "pointing" lines and cones, it's nicer to have
+// one end of line or the base of the cone as the "origin"
+// So, we move vertices forwards by half length
+// now, scaling will work from one endpoint instead of the center
+geometry.shaft.translate(0, 0, 0.5);
+geometry.tip.translate(0, 0, 0.5);
+
 function newArrow(name, color, target, origin) {
-  let shaft = newMesh(name+'_shaft', 'Cylinder', { color });
-  let tip = newMesh(name+'_tip', 'Cone', { color });
+  let shaft = newMesh(name+'_shaft', geometry.shaft, { color });
+  let tip = newMesh(name+'_tip', geometry.tip, { color });
 
-  // want to use lookAt() to orient lines
-  // lookAt() aims +z towards target (or -z for a camera)
-  // but cone and cyl geometries point along their Y axis (why!?)
-  // So, we rotate all vertices (expensive operation) Y->Z
-  // i.e. afterwards, geom +Z is "forwards" (as it should be(!))
-  shaft.geometry.rotateX(deg(90));
-  tip.geometry.rotateX(deg(90));
+  shaft.scale.set(0, 0, 0.9);
+  tip.scale.set(0, 0, 0.1);
 
-  // Next, geom vertices are *centered* at (0,0,0)
-  // however, for "pointing" lines and cones, it's nicer to have
-  // one end of line or the base of the cone as the "origin"
-  // So, we move vertices forwards by half length
-  // now, scaling will work from one endpoint instead of the center
-  shaft.geometry.translate(0, 0, 0.5);
-  tip.geometry.translate(0, 0, 0.5);
-
-  shaft.scale.set(thickness, thickness, 0.9);
-
-  tip.scale.set(thickness*2, thickness*2, 0.1);
   tip.translateZ(0.9);
 
   arrow = new e3.Group();
@@ -77,6 +79,8 @@ function newArrow(name, color, target, origin) {
   if (origin) arrow.setWorldPosition(origin);
   if (target) pointArrow(arrow, target);
 
+  arrowThickness(arrow, 0.02);
+
   return arrow;
 }
 
@@ -86,6 +90,13 @@ function arrowLength(arrow, length) {
   arrow.arrowShaft.scale.setComponent(2, shaftLength);
   let zTip = v(0,0,1); zTip.applyQuaternion(arrow.arrowTip.quaternion);
   arrow.arrowTip.position.copy(zTip.multiplyScalar(shaftLength));
+}
+
+function arrowThickness(arrow, th) {
+  let s = arrow.arrowShaft.scale;
+  s.x = s.y = th;
+  s = arrow.arrowTip.scale;
+  s.x = s.y = th * 2;
 }
 
 function pointArrow(arrow, target) {
@@ -108,7 +119,7 @@ function asVector(arrow) {
 axis_a = newArrow('axis_a', 0xff0000, v(1,0,0)); // world X
 scene.add(axis_a);
 
-axis_b = newArrow('axis_b', 0xff7700, v(0,0,1)); // world Z
+axis_b = newArrow('axis_b', 0xff0000, v(0,0,1)); // world Z
 scene.add(axis_b);
 
 dependents = new Map();
@@ -142,7 +153,7 @@ updates.set(a_x_b, function(arr) {
   pointArrow(arr, a);
 });
 
-a_p_b = newArrow('a_p_b', 0x0000ff, v(1,0,1));
+a_p_b = newArrow('a_p_b', 0xff7700, v(1,0,1));
 scene.add(a_p_b);
 dependents.get(axis_a).add(a_p_b);
 dependents.get(axis_b).add(a_p_b);
@@ -150,11 +161,11 @@ dependents.get(axis_b).add(a_p_b);
 updates.set(a_p_b, function(arr) {
   let a = asVector(axis_a);
   let b = asVector(axis_b);
-  a.add(b);
-  pointArrow(arr, a);
+  pointArrow(arr, a.add(b));
 });
 
 axis_c = newArrow('axis_c', 0x00ff00);
+arrowThickness(axis_c, 0.025);
 scene.add(axis_c);
 dependents.set(a_x_b, new Set([axis_c]));
 dependents.set(a_p_b, new Set([axis_c]));
@@ -162,8 +173,17 @@ dependents.set(a_p_b, new Set([axis_c]));
 updates.set(axis_c, function(arr) {
   let x = asVector(a_x_b);
   let p = asVector(a_p_b);
-  x.add(p); x.multiplyScalar(0.5);
-  pointArrow(arr, x);
+  x.add(p);
+  pointArrow(arr, x.multiplyScalar(0.5));
+});
+
+naxis_c = newArrow('naxis_c', 0x0000ff);
+scene.add(naxis_c);
+dependents.set(axis_c, new Set([naxis_c]));
+
+updates.set(naxis_c, function(arr) {
+  let c = asVector(axis_c);
+  pointArrow(arr, c.normalize());
 });
 
 viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs))));
@@ -183,17 +203,18 @@ ambientLight = new e3.AmbientLight(0x333333);
 scene.add(ambientLight);
 
 doAnimate = true;
-degPerS = 5;
+degPerS = 45;
 lastTimeMs = undefined;
 angle = 0;
 tick = deltaS => { viz(angle); angle += degPerS * deltaS; angle = angle % 360; };
 
-function r(timeMs) {
+function r() {
+  let timeMs = performance.now();
   if (lastTimeMs === undefined) lastTimeMs = timeMs;
   if (doAnimate) {
-    //log((timeMs - lastTimeMs) * 10e-3);
-    //log(angle);
-    tick((timeMs - lastTimeMs) * 10e-3);
+    //log('t', (timeMs - lastTimeMs) * 1e-3);
+    //log('a', angle);
+    tick((timeMs - lastTimeMs) * 1e-3);
     lastTimeMs = timeMs;
     requestAnimationFrame(r);
   } else lastTimeMs = undefined;
