@@ -1,3 +1,4 @@
+log = (...args) => { console.log(...args); return args ? args[0] : undefined };
 e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
 turn = frac => 2*Math.PI * frac;
@@ -80,9 +81,11 @@ function newArrow(name, color, target, origin) {
 }
 
 function arrowLength(arrow, length) {
-  arrow.arrowShaft.scale.setComponent(2, length-0.1);
+  let shaftLength = Math.abs(length) - 0.1;
+  arrow.visible = shaftLength > 0.0;
+  arrow.arrowShaft.scale.setComponent(2, shaftLength);
   let zTip = v(0,0,1); zTip.applyQuaternion(arrow.arrowTip.quaternion);
-  arrow.arrowTip.position.copy(zTip.multiplyScalar(length-0.1));
+  arrow.arrowTip.position.copy(zTip.multiplyScalar(shaftLength));
 }
 
 function pointArrow(arrow, target) {
@@ -90,6 +93,16 @@ function pointArrow(arrow, target) {
   arrow.lookAt(target);
   arrowLength(arrow, delta.length());
   arrow.updateMatrixWorld();
+}
+
+function asVector(arrow) {
+  let target = v(0,0,1); arrow.arrowShaft.localToWorld(target);
+  let shaftLength = target.length();
+  if (shaftLength <= 0.1 && !arrow.visible) shaftLength *= -1;
+  target.multiplyScalar((shaftLength+0.1)/shaftLength);
+  let origin = v(); arrow.getWorldPosition(origin);
+  target.sub(origin);
+  return target;
 }
 
 axis_a = newArrow('axis_a', 0xff0000, v(1,0,0)); // world X
@@ -104,13 +117,16 @@ updates = new Map();
 function changed(obj) {
   let deps = dependents.get(obj);
   if (deps) {
+    let to_notify = [];
     deps.forEach(d => {
       let update = updates.get(d);
       if (update) {
         update(d);
-        changed(d);
+        //log('Updated '+d.name);
+        to_notify.push(d);
       }
     });
+    to_notify.forEach(changed);
   }
 }
 
@@ -120,13 +136,37 @@ dependents.set(axis_a, new Set([a_x_b]));
 dependents.set(axis_b, new Set([a_x_b]));
 
 updates.set(a_x_b, function(arr) {
-  let a = v(0,0,1); axis_a.localToWorld(a);
-  let b = v(0,0,1); axis_b.localToWorld(b);
+  let a = asVector(axis_a);
+  let b = asVector(axis_b);
   a.cross(b);
   pointArrow(arr, a);
 });
 
-viz = degs => r(changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)))))
+a_p_b = newArrow('a_p_b', 0x0000ff, v(1,0,1));
+scene.add(a_p_b);
+dependents.get(axis_a).add(a_p_b);
+dependents.get(axis_b).add(a_p_b);
+
+updates.set(a_p_b, function(arr) {
+  let a = asVector(axis_a);
+  let b = asVector(axis_b);
+  a.add(b);
+  pointArrow(arr, a);
+});
+
+axis_c = newArrow('axis_c', 0x00ff00);
+scene.add(axis_c);
+dependents.set(a_x_b, new Set([axis_c]));
+dependents.set(a_p_b, new Set([axis_c]));
+
+updates.set(axis_c, function(arr) {
+  let x = asVector(a_x_b);
+  let p = asVector(a_p_b);
+  x.add(p); x.multiplyScalar(0.5);
+  pointArrow(arr, x);
+});
+
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs))));
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
@@ -142,8 +182,23 @@ scene.add(directionalLight);
 ambientLight = new e3.AmbientLight(0x333333);
 scene.add(ambientLight);
 
-function r() {
+doAnimate = true;
+degPerS = 5;
+lastTimeMs = undefined;
+angle = 0;
+tick = deltaS => { viz(angle); angle += degPerS * deltaS; angle = angle % 360; };
+
+function r(timeMs) {
+  if (lastTimeMs === undefined) lastTimeMs = timeMs;
+  if (doAnimate) {
+    //log((timeMs - lastTimeMs) * 10e-3);
+    //log(angle);
+    tick((timeMs - lastTimeMs) * 10e-3);
+    lastTimeMs = timeMs;
+    requestAnimationFrame(r);
+  } else lastTimeMs = undefined;
+
   renderer.render(scene, camera);
 }
 
-r();
+requestAnimationFrame(r);
