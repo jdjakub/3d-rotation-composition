@@ -218,25 +218,33 @@ updates.set(a_p_b, function(arr) {
 });
 
 function tracePath(name, currPos, color, pathLen) {
-  if (paths[name] === undefined) paths[name] = [];
-  let vertices = paths[name];
-  if (vertices instanceof Array) { // if still adding vertices
-    if (vertices.length < pathLen) {
-      let prevPos = final(vertices);
-      if (prevPos !== undefined) {
-        prevPos = v(...prevPos);
-        if (prevPos.distanceTo(currPos) < 0.04) return;
-      }
-      vertices.push([currPos.x, currPos.y, currPos.z]);
-    } else {
-      paths[name] = new e3.Points( // replace with Object3D
-        new e3.BufferGeometry().setAttribute('position',
-          new e3.Float32BufferAttribute(vertices.flat(), 3),
-        ),
-        new e3.PointsMaterial({ color, size: 0.025 }),
-      );
-      scene.add(paths[name]);
+  if (paths[name] === undefined) {
+    paths[name] = new e3.Points( // replace with Object3D
+      new e3.BufferGeometry().setAttribute('position',
+        new e3.BufferAttribute(
+          new Float32Array(pathLen*3), 3
+        ).setUsage(e3.DynamicDrawUsage)
+      ),
+      new e3.PointsMaterial({ color, size: 0.025 }),
+    );
+    paths[name].geometry.setDrawRange(0, 0);
+    scene.add(paths[name]);
+  }
+
+  let geom = paths[name].geometry;
+  let currPathLen = geom.drawRange.count;
+  let ps = geom.getAttribute('position');
+
+  if (currPathLen < pathLen) {
+    let cpl1 = currPathLen-1;
+    if (currPathLen > 0) {
+      let prevPos = v(ps.getX(cpl1), ps.getY(cpl1), ps.getZ(cpl1));
+      if (prevPos.distanceTo(currPos) < 0.04) return;
     }
+    ps.setXYZ(currPathLen, currPos.x, currPos.y, currPos.z);
+    ps.needsUpdate = true;
+    ps.updateRange = { offset: currPathLen*3, count: 3 };
+    geom.setDrawRange(0, currPathLen+1);
   }
 }
 
@@ -299,13 +307,17 @@ function tick(deltaS) {
 
 function retrace() {
   Object.entries(paths).forEach(([k,p]) => {
-    if (!(p instanceof Array)) {
-      scene.remove(p);
-      p.geometry.dispose();
-      p.material.dispose();
-    }
+    scene.remove(p);
+    p.geometry.dispose();
+    p.material.dispose();
     paths[k] = undefined;
   });
+}
+
+function angles(a,b) {
+  changed(angle_a, angle_a[0] = deg(a));
+  changed(angle_b, angle_b[0] = deg(b));
+  retrace();
 }
 
 function r() {
