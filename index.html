@@ -3,8 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <title>3D Rotation composition</title>
+    <style>
+      #angle-controls {
+        position: absolute;
+        z-index: 100;
+        display: block;
+        width: 200px;
+        height: 200px;
+        top: 0px;
+        background-color: #e8e8e8;
+      }
+
+      #angle-controls * {
+        stroke-width: 0.01
+      }
+    </style>
 </head>
 <body style="margin: 0px">
+    <svg id="angle-controls" width="200" height="200" viewBox="-1 -1 2 2">
+    <g transform="scale(1, -1)">
+      <line x1="-1" x2="+1" y1="0" y2="0" stroke="black" />
+      <line y1="-1" y2="+1" x1="0" x2="0" stroke="black" />
+      <circle id="curr-angles" cx="0.5" cy="0.5" r="0.05" stroke="black" fill="yellow" />
+    </g>
+    </svg>
     <!-- THREE.js r122 -->
     <script src="./three.js"></script>
     <script src="./app.js"></script>

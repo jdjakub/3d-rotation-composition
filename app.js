@@ -219,7 +219,7 @@ updates.set(a_p_b, function(arr) {
 
 function tracePath(name, currPos, color, pathLen) {
   if (paths[name] === undefined) {
-    paths[name] = new e3.Points( // replace with Object3D
+    paths[name] = new e3.Points(
       new e3.BufferGeometry().setAttribute('position',
         new e3.BufferAttribute(
           new Float32Array(pathLen*3), 3
@@ -277,10 +277,9 @@ updates.set(naxis_c, function(arr) {
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
   { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
 
-camera.position.set(1.5,1,1.5);
+camera.position.set(1.25,1,1.25);
 tmp = v(); mesh.sphere.getWorldPosition(tmp);
 camera.lookAt(tmp);
-camera.translateZ(0.3);
 
 directionalLight = new e3.DirectionalLight(0xffffff, 1);
 directionalLight.position.copy(v(1,1,-1));
@@ -291,8 +290,8 @@ scene.add(ambientLight);
 
 // ### ANIMATION
 
-doAnimate = true;
-degPerS = 45;
+animating = true;
+degPerS = 90;
 lastTimeMs = undefined;
 angle = 0;
 
@@ -320,10 +319,28 @@ function angles(a,b) {
   retrace();
 }
 
+svg = document.getElementById('angle-controls');
+angleMarker = document.getElementById('curr-angles');
+svg.onclick = e => {
+  let r = svg.getBoundingClientRect();
+  let pos = v(e.clientX, e.clientY, 0);
+  let center = v(r.left+r.right, r.top+r.bottom, 0).multiplyScalar(0.5);
+  pos.sub(center); // from center
+  pos.multiply(v(360/r.width, -360/r.height)); // in (-180, +180) with Y up
+  angles(pos.x, pos.y);
+};
+
+dependents.get(angle_a).add(angleMarker);
+dependents.get(angle_b).add(angleMarker);
+updates.set(angleMarker, function(circ) {
+  angleMarker.setAttribute('cx', angle_a[0] / Math.PI);
+  angleMarker.setAttribute('cy', angle_b[0] / Math.PI);
+});
+
 function r() {
   let timeMs = performance.now();
   if (lastTimeMs === undefined) lastTimeMs = timeMs;
-  if (doAnimate) {
+  if (animating) {
     //log('t', (timeMs - lastTimeMs) * 1e-3);
     //log('a', angle);
     tick((timeMs - lastTimeMs) * 1e-3);
@@ -335,3 +352,10 @@ function r() {
 }
 
 requestAnimationFrame(r);
+
+function doAnimate(shouldAnimate) {
+  if (!animating && shouldAnimate) {
+    requestAnimationFrame(r);
+  }
+  animating = shouldAnimate;
+}
