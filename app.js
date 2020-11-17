@@ -8,6 +8,52 @@ turn = frac => 2*Math.PI * frac;
 deg = degs => turn(degs/360);
 xtoz = angle => v(Math.cos(angle), 0, Math.sin(angle));
 
+// ### SVG UTILITIES (from my OROM / Id work)
+attr_single = (elem, key, val_or_func) => {
+  let old;
+  if (key === 'textContent') old = elem.textContent;
+  else old = elem.getAttribute(key);
+
+  let value = typeof(val_or_func) === 'function' ? val_or_func(old) : val_or_func;
+  if (key === 'textContent') elem.textContent = value;
+  else if (value !== undefined) elem.setAttribute(key, value);
+
+  return old;
+};
+
+// e.g. attr(rect, {stroke_width: 5, stroke: 'red'})
+//      attr(rect, 'stroke', 'red')
+//      attr(rect, 'height', h => h+32)
+//      attr(rect, {fill: 'orange', height: h => h+32})
+attr = (elem, key_or_dict, val_or_nothing) => {
+  if (typeof(key_or_dict) === 'string') {
+    let key = key_or_dict;
+    let value = val_or_nothing;
+    return attr_single(elem, key, value);
+  } else {
+    let dict = key_or_dict;
+    for (let [k,v_or_f] of Object.entries(dict)) {
+      let key = k.replace('_','-');
+      attr_single(elem, key, v_or_f);
+    }
+  }
+}
+
+nums = (arr) => arr.map(x => +x);
+attrs = (el, ...keys) => keys.map(k => attr(el, k));
+props = (o,  ...keys) => keys.map(k => o[k]);
+
+create_element = (tag, attrs, parent, namespace) => {
+  let elem = document.createElementNS(namespace, tag);
+  if (attrs !== undefined) attr(elem, attrs);
+  if (parent === undefined) parent = window.svg;
+  parent.appendChild(elem);
+  return elem;
+};
+
+// e.g. rect = svgel('rect', {x: 5, y: 5, width: 5, height: 5}, svg)
+svgel = (tag, attrs, parent) => create_element(tag, attrs, parent, 'http://www.w3.org/2000/svg');
+
 // ### THREE.JS SETUP
 
 renderer = new e3.WebGLRenderer({ antialias: true });
@@ -313,6 +359,8 @@ function retrace() {
   });
 }
 
+// ### INDEPENDENTLY VARIABLE ANGLES UI
+
 function angles(a,b) {
   changed(angle_a, angle_a[0] = deg(a));
   changed(angle_b, angle_b[0] = deg(b));
@@ -320,21 +368,38 @@ function angles(a,b) {
 }
 
 svg = document.getElementById('angle-controls');
+gls = document.getElementById('gridlines');
+egls = document.getElementById('emph-gridlines');
+let granularity = 12;
+for (let i=1; i<granularity; i++) {
+  let g = i % 4 === 0 ? egls : gls;
+  // neg vertical
+  svgel('line', { x1: -i/granularity, x2: -i/granularity, y1: -1, y2: +1 }, g);
+  // neg horizontal
+  svgel('line', { y1: -i/granularity, y2: -i/granularity, x1: -1, x2: +1 }, g);
+  // pos vertical
+  svgel('line', { x1: i/granularity, x2: i/granularity, y1: -1, y2: +1 }, g);
+  // pos horizontal
+  svgel('line', { y1: i/granularity, y2: i/granularity, x1: -1, x2: +1 }, g);
+}
+
 angleMarker = document.getElementById('curr-angles');
 svg.onclick = e => {
   let r = svg.getBoundingClientRect();
+  let [halfW, halfH] = [r.width/2, r.height/2];
   let pos = v(e.clientX, e.clientY, 0);
   let center = v(r.left+r.right, r.top+r.bottom, 0).multiplyScalar(0.5);
   pos.sub(center); // from center
-  pos.multiply(v(360/r.width, -360/r.height)); // in (-180, +180) with Y up
+  pos.multiply(v(granularity/halfW, -granularity/halfH, 0)); // in (-12, +12) with Y up
+  pos.x = Math.round(pos.x); pos.y = Math.round(pos.y); // snap to grid
+  pos.multiplyScalar(180/granularity); // expand to degrees
   angles(pos.x, pos.y);
 };
 
 dependents.get(angle_a).add(angleMarker);
 dependents.get(angle_b).add(angleMarker);
 updates.set(angleMarker, function(circ) {
-  angleMarker.setAttribute('cx', angle_a[0] / Math.PI);
-  angleMarker.setAttribute('cy', angle_b[0] / Math.PI);
+  attr(angleMarker, { cx: angle_a[0] / Math.PI, cy: angle_b[0] / Math.PI });
 });
 
 function r() {
