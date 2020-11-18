@@ -297,6 +297,7 @@ updates.set(angleMarker, function(circ) {
 
 // ### PATH TRACING
 
+pathMaterials = {};
 paths = {};
 PATH_LENGTH = 100;
 
@@ -310,15 +311,16 @@ updates.set(a_p_b, function(arr) {
 function tracePath(name, currPos, color, pathLen) {
   let path = paths[name];
   if (path === undefined) {
-    path = new e3.Points(
+    let mat = pathMaterials[color];
+    if (mat === undefined)
+      pathMaterials[color] = mat = new e3.PointsMaterial({ color, size: 0.025 });
+
+    paths[name] = path = new e3.Points(
       new e3.BufferGeometry().setAttribute('position',
         new e3.BufferAttribute(
           new Float32Array(pathLen*3), 3
         ).setUsage(e3.DynamicDrawUsage)
-      ),
-      new e3.PointsMaterial({ color, size: 0.025 }),
-    );
-    paths[name] = path;
+      ), mat);
     path.geometry.setDrawRange(0, 0);
     path.angleAtStart = interAxisAngle;
     path.prevAngleValue = 0;
