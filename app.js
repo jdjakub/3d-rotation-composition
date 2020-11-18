@@ -171,55 +171,110 @@ function asVector(arrow) {
   return target;
 }
 
-// ### CHANGE TRACKING
+// ### CHANGE PROPAGATION & MANAGEMENT
 
-dependents = new Map();
-updates = new Map();
+dependOutputs = new Map();
+dependInputs = new Map();
+function dependsOn(node, ...dependencies) {
+  // Represent each relation node <-- dependency
+  let dIns = dependInputs.get(node);
+  if (dIns === undefined) {
+    dIns = new Set();
+    dependInputs.set(node, dIns);
+  }
+  dependencies.forEach(d => dIns.add(d));
+
+  // Represent each relation dependency --> node
+  dependencies.forEach(d => {
+    let dOuts = dependOutputs.get(d);
+    if (dOuts === undefined) {
+      dOuts = new Set();
+      dependOutputs.set(d, dOuts);
+    }
+    dOuts.add(node);
+  });
+}
+
+function feedsInto(dependency, ...nodes) {
+  nodes.forEach(n => dependsOn(n, dependency));
+}
+
+updates = new Map(); // Registry of per-node update functions
+
+// Builds up a copy of the sub-DAG rooted at `node`
+function discoverInputsFrom(node, scratchInputs) {
+  let outs = dependOutputs.get(node);
+  if (outs) outs.forEach(out => {
+    sInps = scratchInputs.get(out);
+    if (sInps === undefined) {
+      sInps = new Set();
+      scratchInputs.set(out, sInps);
+    }
+    sInps.add(node);
+    // depth-first traversal
+    discoverInputsFrom(out, scratchInputs);
+  });
+}
 
 function changed(obj) {
-  let deps = dependents.get(obj);
-  if (deps) {
-    let to_notify = [];
-    deps.forEach(d => {
-      let update = updates.get(d);
+  let scratchInputs = new Map(); // Disposable subset of the "inputs" relation
+  discoverInputsFrom(obj, scratchInputs);
+  traverseAndUpdateFrom(scratchInputs)(obj);
+}
+
+// Propagates changes, making sure to only call each node's update() once
+let traverseAndUpdateFrom = scratchInputs => obj => {
+  let outs = dependOutputs.get(obj); // Who depends on me as input?
+  if (outs) {
+    let toNotify = []; // Whom to recurse on at the end
+    outs.forEach(out => { // In addition to me, it might depend on others
+      let sInps = scratchInputs.get(out);
+      if (sInps.size > 1) { // If there are other inputs remaining...
+        sInps.delete(obj); // remove ourselves from consideration
+        return; // and eventually the final input can trigger the update
+      }
+      // Otherwise ... we can finally update the node - ONCE!
+
+      let update = updates.get(out);
       if (update) {
-        update(d);
-        //log('Updated '+d.name);
-        to_notify.push(d);
+        update(out);
+        //log('Updated '+out.name);
+        toNotify.push(out);
       }
     });
-    to_notify.forEach(changed);
+    // recurse on the nodes that were updated
+    toNotify.forEach(traverseAndUpdateFrom(scratchInputs));
   }
-}
+};
 
 // ### ANGLES AND AXES SETUP
 
-angle_a = [deg(90)];
-angle_b = [deg(90)];
-s_a2 = [Math.sin(angle_a[0]/2)];
-s_b2 = [Math.sin(angle_b[0]/2)];
-c_a2 = [Math.cos(angle_a[0]/2)];
-c_b2 = [Math.cos(angle_b[0]/2)];
+angle_a = [deg(90), 'angle_a'];
+angle_b = [deg(90), 'angle_b'];
+s_a2 = [Math.sin(angle_a[0]/2), 's_a2'];
+s_b2 = [Math.sin(angle_b[0]/2), 's_b2'];
+c_a2 = [Math.cos(angle_a[0]/2), 'c_a2'];
+c_b2 = [Math.cos(angle_b[0]/2), 'c_b2'];
 
-dependents.set(angle_a, new Set([s_a2, c_a2]));
-dependents.set(angle_b, new Set([s_b2, c_b2]));
+feedsInto(angle_a, s_a2, c_a2);
+feedsInto(angle_b, s_b2, c_b2);
 
-updates.set(s_a2, function(angle) {
-  angle[0] = Math.sin(angle_a[0]/2);
+updates.set(s_a2, function(sine) {
+  sine[0] = Math.sin(angle_a[0]/2);
 });
-updates.set(s_b2, function(angle) {
-  angle[0] = Math.sin(angle_b[0]/2);
+updates.set(s_b2, function(sine) {
+  sine[0] = Math.sin(angle_b[0]/2);
 });
-updates.set(c_a2, function(angle) {
-  angle[0] = Math.cos(angle_a[0]/2);
+updates.set(c_a2, function(cosine) {
+  cosine[0] = Math.cos(angle_a[0]/2);
 });
-updates.set(c_b2, function(angle) {
-  angle[0] = Math.cos(angle_b[0]/2);
+updates.set(c_b2, function(cosine) {
+  cosine[0] = Math.cos(angle_b[0]/2);
 });
 
 axis_a = newArrow('axis_a', 0xff0000, v(s_a2[0],0,0)); // world X
 scene.add(axis_a);
-dependents.set(s_a2, new Set([axis_a]));
+feedsInto(s_a2, axis_a);
 
 updates.set(axis_a, function(arr) {
   arrowLength(arr, s_a2[0]);
@@ -227,7 +282,7 @@ updates.set(axis_a, function(arr) {
 
 axis_b = newArrow('axis_b', 0xff0000, v(0,0,s_b2[0])); // world Z
 scene.add(axis_b);
-dependents.set(s_b2, new Set([axis_b]));
+feedsInto(s_b2, axis_b);
 
 updates.set(axis_b, function(arr) {
   arrowLength(arr, s_b2[0]);
@@ -235,8 +290,7 @@ updates.set(axis_b, function(arr) {
 
 a_x_b = newArrow('a_x_b', 0xffff00, v(0,-s_a2[0]*s_b2[0],0));
 scene.add(a_x_b);
-dependents.set(axis_a, new Set([a_x_b]));
-dependents.set(axis_b, new Set([a_x_b]));
+dependsOn(a_x_b, axis_a, axis_b);
 
 updates.set(a_x_b, function(arr) {
   let a = asVector(axis_a);
@@ -247,18 +301,9 @@ updates.set(a_x_b, function(arr) {
 
 a_p_b = newArrow('a_p_b', 0xff7700, v(1,0,1));
 scene.add(a_p_b);
-dependents.get(axis_a).add(a_p_b);
-dependents.get(axis_b).add(a_p_b);
-dependents.set(c_a2, new Set([a_p_b]));
-dependents.set(c_b2, new Set([a_p_b]));
+dependsOn(a_p_b, axis_a, axis_b, c_a2, c_b2);
 
 // ### INDEPENDENTLY VARIABLE ANGLES UI
-
-function angles(a,b) {
-  changed(angle_a, angle_a[0] = deg(a));
-  changed(angle_b, angle_b[0] = deg(b));
-  retrace();
-}
 
 svg = document.getElementById('angle-controls');
 gls = document.getElementById('gridlines');
@@ -277,6 +322,24 @@ for (let i=1; i<granularity; i++) {
 }
 
 angleMarker = document.getElementById('curr-angles');
+gridPosition = [[6,6]]; // Goddamn initial conditions setup!
+feedsInto(gridPosition, angle_a, angle_b);
+updates.set(angle_a, function(angle) {
+  angle[0] = gridPosition[0][0] * Math.PI / granularity;
+});
+updates.set(angle_b, function(angle) {
+  angle[0] = gridPosition[0][1] * Math.PI / granularity;
+});
+
+function angles(a,b) {
+  if (a > 180) a -= 360;
+  if (b > 180) b -= 360;
+  a *= granularity/180;
+  b *= granularity/180;
+  a = Math.round(a); b = Math.round(b); // Snap to grid
+  changed(gridPosition, gridPosition[0] = [a,b]);
+}
+
 svg.onclick = e => {
   let r = svg.getBoundingClientRect();
   let [halfW, halfH] = [r.width/2, r.height/2];
@@ -285,25 +348,32 @@ svg.onclick = e => {
   pos.sub(center); // from center
   pos.multiply(v(granularity/halfW, -granularity/halfH, 0)); // in (-12, +12) with Y up
   pos.x = Math.round(pos.x); pos.y = Math.round(pos.y); // snap to grid
-  pos.multiplyScalar(180/granularity); // expand to degrees
-  angles(pos.x, pos.y);
+  changed(gridPosition, gridPosition[0] = [pos.x, pos.y]);
+  retrace();
 };
 
-dependents.get(angle_a).add(angleMarker);
-dependents.get(angle_b).add(angleMarker);
+feedsInto(gridPosition, angleMarker);
 updates.set(angleMarker, function(circ) {
-  attr(angleMarker, { cx: angle_a[0] / Math.PI, cy: angle_b[0] / Math.PI });
+  attr(angleMarker, {
+    cx: gridPosition[0][0] / granularity,
+    cy: gridPosition[0][1] / granularity,
+  });
 });
 
 // ### PATH TRACING
 
 pathMaterials = {};
-paths = {};
+paths = [];
 PATH_LENGTH = 100;
 
+feedsInto(gridPosition, paths);
+updates.set(paths, function() {
+  //retrace();
+});
+
 updates.set(a_p_b, function(arr) {
-  let a = asVector(axis_a).multiplyScalar(c_b2);
-  let b = asVector(axis_b).multiplyScalar(c_a2);
+  let a = asVector(axis_a).multiplyScalar(c_b2[0]);
+  let b = asVector(axis_b).multiplyScalar(c_a2[0]);
   pointArrow(arr, a.add(b));
   tracePath('p_path', a, 0xff7700, PATH_LENGTH);
 });
@@ -360,7 +430,6 @@ function retrace() {
   Object.entries(paths).forEach(([k,p]) => {
     scene.remove(p);
     p.geometry.dispose();
-    p.material.dispose();
     paths[k] = undefined;
   });
 }
@@ -368,8 +437,7 @@ function retrace() {
 axis_c = newArrow('axis_c', 0x00ff00);
 arrowThickness(axis_c, 0.025);
 scene.add(axis_c);
-dependents.set(a_x_b, new Set([axis_c]));
-dependents.set(a_p_b, new Set([axis_c]));
+dependsOn(axis_c, a_x_b, a_p_b);
 
 updates.set(axis_c, function(arr) {
   let x = asVector(a_x_b);
@@ -381,7 +449,7 @@ updates.set(axis_c, function(arr) {
 
 naxis_c = newArrow('naxis_c', 0x0000ff);
 scene.add(naxis_c);
-dependents.set(axis_c, new Set([naxis_c]));
+feedsInto(axis_c, naxis_c);
 
 updates.set(naxis_c, function(arr) {
   let c = asVector(axis_c);
@@ -425,10 +493,12 @@ function r() {
   let timeMs = performance.now();
   if (lastTimeMs === undefined) lastTimeMs = timeMs;
   if (animating) {
-    //log('t', (timeMs - lastTimeMs) * 1e-3);
-    //log('a', interAxisAngle);
-    tick((timeMs - lastTimeMs) * 1e-3);
-    lastTimeMs = timeMs;
+    //if (timeMs - lastTimeMs > 1000) {
+      //log('t', (timeMs - lastTimeMs) * 1e-3);
+      //log('a', interAxisAngle);
+      tick((timeMs - lastTimeMs) * 1e-3);
+      lastTimeMs = timeMs;
+    //}
     requestAnimationFrame(r);
   } else lastTimeMs = undefined;
 
@@ -437,9 +507,9 @@ function r() {
 
 requestAnimationFrame(r);
 
-function doAnimate(shouldAnimate) {
-  if (!animating && shouldAnimate) {
+function toggleAnimate() {
+  if (!animating) {
     requestAnimationFrame(r);
   }
-  animating = shouldAnimate;
+  animating = !animating;
 }
