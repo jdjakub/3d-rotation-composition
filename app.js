@@ -252,113 +252,6 @@ dependents.get(axis_b).add(a_p_b);
 dependents.set(c_a2, new Set([a_p_b]));
 dependents.set(c_b2, new Set([a_p_b]));
 
-// ### PATH TRACING
-
-paths = {};
-
-updates.set(a_p_b, function(arr) {
-  let a = asVector(axis_a).multiplyScalar(c_b2);
-  let b = asVector(axis_b).multiplyScalar(c_a2);
-  pointArrow(arr, a.add(b));
-  tracePath('p_path', a, 0xff7700, 120);
-});
-
-function tracePath(name, currPos, color, pathLen) {
-  if (paths[name] === undefined) {
-    paths[name] = new e3.Points(
-      new e3.BufferGeometry().setAttribute('position',
-        new e3.BufferAttribute(
-          new Float32Array(pathLen*3), 3
-        ).setUsage(e3.DynamicDrawUsage)
-      ),
-      new e3.PointsMaterial({ color, size: 0.025 }),
-    );
-    paths[name].geometry.setDrawRange(0, 0);
-    scene.add(paths[name]);
-  }
-
-  let geom = paths[name].geometry;
-  let currPathLen = geom.drawRange.count;
-  let ps = geom.getAttribute('position');
-
-  if (currPathLen < pathLen) {
-    let cpl1 = currPathLen-1;
-    if (currPathLen > 0) {
-      let prevPos = v(ps.getX(cpl1), ps.getY(cpl1), ps.getZ(cpl1));
-      if (prevPos.distanceTo(currPos) < 0.04) return;
-    }
-    ps.setXYZ(currPathLen, currPos.x, currPos.y, currPos.z);
-    ps.needsUpdate = true;
-    ps.updateRange = { offset: currPathLen*3, count: 3 };
-    geom.setDrawRange(0, currPathLen+1);
-  }
-}
-
-axis_c = newArrow('axis_c', 0x00ff00);
-arrowThickness(axis_c, 0.025);
-scene.add(axis_c);
-dependents.set(a_x_b, new Set([axis_c]));
-dependents.set(a_p_b, new Set([axis_c]));
-
-updates.set(axis_c, function(arr) {
-  let x = asVector(a_x_b);
-  let p = asVector(a_p_b);
-  x.add(p);
-  pointArrow(arr, x);
-  tracePath('c_path', x, 0x00ff00, 80);
-});
-
-naxis_c = newArrow('naxis_c', 0x0000ff);
-scene.add(naxis_c);
-dependents.set(axis_c, new Set([naxis_c]));
-
-updates.set(naxis_c, function(arr) {
-  let c = asVector(axis_c);
-  pointArrow(arr, c.normalize());
-  tracePath('path_nc', c, 0x0000ff, 80);
-});
-
-// ### SPHERE, CAMERA, LIGHTS
-
-scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
-  { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
-
-camera.position.set(1.25,1,1.25);
-tmp = v(); mesh.sphere.getWorldPosition(tmp);
-camera.lookAt(tmp);
-
-directionalLight = new e3.DirectionalLight(0xffffff, 1);
-directionalLight.position.copy(v(1,1,-1));
-scene.add(directionalLight);
-
-ambientLight = new e3.AmbientLight(0x333333);
-scene.add(ambientLight);
-
-// ### ANIMATION
-
-animating = true;
-degPerS = 90;
-lastTimeMs = undefined;
-angle = 0;
-
-viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2[0])));
-
-function tick(deltaS) {
-  viz(angle);
-  tracePath('b_path', asVector(axis_b), 0xff0000, 120);
-  angle += degPerS * deltaS;
-  angle = angle % 360;
-}
-
-function retrace() {
-  Object.entries(paths).forEach(([k,p]) => {
-    scene.remove(p);
-    p.geometry.dispose();
-    p.material.dispose();
-    paths[k] = undefined;
-  });
-}
-
 // ### INDEPENDENTLY VARIABLE ANGLES UI
 
 function angles(a,b) {
@@ -402,12 +295,136 @@ updates.set(angleMarker, function(circ) {
   attr(angleMarker, { cx: angle_a[0] / Math.PI, cy: angle_b[0] / Math.PI });
 });
 
+// ### PATH TRACING
+
+paths = {};
+PATH_LENGTH = 100;
+
+updates.set(a_p_b, function(arr) {
+  let a = asVector(axis_a).multiplyScalar(c_b2);
+  let b = asVector(axis_b).multiplyScalar(c_a2);
+  pointArrow(arr, a.add(b));
+  tracePath('p_path', a, 0xff7700, PATH_LENGTH);
+});
+
+function tracePath(name, currPos, color, pathLen) {
+  let path = paths[name];
+  if (path === undefined) {
+    path = new e3.Points(
+      new e3.BufferGeometry().setAttribute('position',
+        new e3.BufferAttribute(
+          new Float32Array(pathLen*3), 3
+        ).setUsage(e3.DynamicDrawUsage)
+      ),
+      new e3.PointsMaterial({ color, size: 0.025 }),
+    );
+    paths[name] = path;
+    path.geometry.setDrawRange(0, 0);
+    path.angleAtStart = interAxisAngle;
+    path.prevAngleValue = 0;
+    path.finishedTrace = false;
+    scene.add(paths[name]);
+  }
+
+  if (path.finishedTrace) return;
+
+  // Figure out whether we've covered a full turn from when we started tracing
+  let angleSoFar = (interAxisAngle-path.angleAtStart + 360) % 360;
+  if (angleSoFar < path.prevAngleValue) {
+    path.finishedTrace = true;
+  } else
+    path.prevAngleValue = angleSoFar;
+
+  // Fill in geometry
+  let geom = path.geometry;
+  let currPathLen = geom.drawRange.count;
+  let ps = geom.getAttribute('position');
+
+  if (currPathLen < pathLen) {
+
+    let cpl1 = currPathLen-1;
+    if (currPathLen > 0) {
+      let prevPos = v(ps.getX(cpl1), ps.getY(cpl1), ps.getZ(cpl1));
+      if (prevPos.distanceTo(currPos) < 0.04) return;
+    }
+    ps.setXYZ(currPathLen, currPos.x, currPos.y, currPos.z);
+    ps.needsUpdate = true;
+    ps.updateRange = { offset: currPathLen*3, count: 3 };
+    geom.setDrawRange(0, currPathLen+1);
+  }
+}
+
+function retrace() {
+  Object.entries(paths).forEach(([k,p]) => {
+    scene.remove(p);
+    p.geometry.dispose();
+    p.material.dispose();
+    paths[k] = undefined;
+  });
+}
+
+axis_c = newArrow('axis_c', 0x00ff00);
+arrowThickness(axis_c, 0.025);
+scene.add(axis_c);
+dependents.set(a_x_b, new Set([axis_c]));
+dependents.set(a_p_b, new Set([axis_c]));
+
+updates.set(axis_c, function(arr) {
+  let x = asVector(a_x_b);
+  let p = asVector(a_p_b);
+  x.add(p);
+  pointArrow(arr, x);
+  tracePath('c_path', x, 0x00ff00, PATH_LENGTH);
+});
+
+naxis_c = newArrow('naxis_c', 0x0000ff);
+scene.add(naxis_c);
+dependents.set(axis_c, new Set([naxis_c]));
+
+updates.set(naxis_c, function(arr) {
+  let c = asVector(axis_c);
+  pointArrow(arr, c.normalize());
+  tracePath('path_nc', c, 0x0000ff, PATH_LENGTH);
+});
+
+// ### SPHERE, CAMERA, LIGHTS
+
+scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
+  { color: 0xaaaaaa, transparent: true, opacity: 0.3 }));
+
+camera.position.set(1.25,1,1.25);
+tmp = v(); mesh.sphere.getWorldPosition(tmp);
+camera.lookAt(tmp);
+
+directionalLight = new e3.DirectionalLight(0xffffff, 1);
+directionalLight.position.copy(v(1,1,-1));
+scene.add(directionalLight);
+
+ambientLight = new e3.AmbientLight(0x333333);
+scene.add(ambientLight);
+
+// ### ANIMATION
+
+animating = true;
+degPerS = 90;
+lastTimeMs = undefined;
+interAxisAngle = 0;
+
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2[0])));
+
+function tick(deltaS) {
+  viz(interAxisAngle);
+  tracePath('b_path', asVector(axis_b), 0xff0000, PATH_LENGTH);
+  interAxisAngle += degPerS * deltaS;
+  interAxisAngle = interAxisAngle % 360;
+}
+
 function r() {
   let timeMs = performance.now();
   if (lastTimeMs === undefined) lastTimeMs = timeMs;
   if (animating) {
     //log('t', (timeMs - lastTimeMs) * 1e-3);
-    //log('a', angle);
+    //log('a', interAxisAngle);
     tick((timeMs - lastTimeMs) * 1e-3);
     lastTimeMs = timeMs;
     requestAnimationFrame(r);
