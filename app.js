@@ -311,34 +311,34 @@ dependsOn(a_p_b, axis_a, axis_b, c_a2, c_b2);
 svg = document.getElementById('angle-controls');
 gls = document.getElementById('gridlines');
 egls = document.getElementById('emph-gridlines');
-let granularity = 12;
-for (let i=1; i<granularity; i++) {
+const GRANULARITY = 12;
+for (let i=1; i<GRANULARITY; i++) {
   let g = i % 4 === 0 ? egls : gls;
   // neg vertical
-  svgel('line', { x1: -i/granularity, x2: -i/granularity, y1: -1, y2: +1 }, g);
+  svgel('line', { x1: -i/GRANULARITY, x2: -i/GRANULARITY, y1: -1, y2: +1 }, g);
   // neg horizontal
-  svgel('line', { y1: -i/granularity, y2: -i/granularity, x1: -1, x2: +1 }, g);
+  svgel('line', { y1: -i/GRANULARITY, y2: -i/GRANULARITY, x1: -1, x2: +1 }, g);
   // pos vertical
-  svgel('line', { x1: i/granularity, x2: i/granularity, y1: -1, y2: +1 }, g);
+  svgel('line', { x1: i/GRANULARITY, x2: i/GRANULARITY, y1: -1, y2: +1 }, g);
   // pos horizontal
-  svgel('line', { y1: i/granularity, y2: i/granularity, x1: -1, x2: +1 }, g);
+  svgel('line', { y1: i/GRANULARITY, y2: i/GRANULARITY, x1: -1, x2: +1 }, g);
 }
 
 angleMarker = document.getElementById('curr-angles');
 gridPosition = [[6,6]]; // Goddamn initial conditions setup!
 feedsInto(gridPosition, angle_a, angle_b);
 updates.set(angle_a, function(angle) {
-  angle[0] = gridPosition[0][0] * Math.PI / granularity;
+  angle[0] = gridPosition[0][0] * Math.PI / GRANULARITY;
 });
 updates.set(angle_b, function(angle) {
-  angle[0] = gridPosition[0][1] * Math.PI / granularity;
+  angle[0] = gridPosition[0][1] * Math.PI / GRANULARITY;
 });
 
 function angles(a,b) {
   if (a > 180) a -= 360;
   if (b > 180) b -= 360;
-  a *= granularity/180;
-  b *= granularity/180;
+  a *= GRANULARITY/180;
+  b *= GRANULARITY/180;
   a = Math.round(a); b = Math.round(b); // Snap to grid
   changed(gridPosition, gridPosition[0] = [a,b]);
 }
@@ -349,7 +349,7 @@ svg.onclick = e => {
   let pos = v(e.clientX, e.clientY, 0);
   let center = v(r.left+r.right, r.top+r.bottom, 0).multiplyScalar(0.5);
   pos.sub(center); // from center
-  pos.multiply(v(granularity/halfW, -granularity/halfH, 0)); // in (-12, +12) with Y up
+  pos.multiply(v(GRANULARITY/halfW, -GRANULARITY/halfH, 0)); // in (-12, +12) with Y up
   pos.x = Math.round(pos.x); pos.y = Math.round(pos.y); // snap to grid
   changed(gridPosition, gridPosition[0] = [pos.x, pos.y]);
 };
@@ -357,8 +357,8 @@ svg.onclick = e => {
 feedsInto(gridPosition, angleMarker);
 updates.set(angleMarker, function(circ) {
   attr(angleMarker, {
-    cx: gridPosition[0][0] / granularity,
-    cy: gridPosition[0][1] / granularity,
+    cx: gridPosition[0][0] / GRANULARITY,
+    cy: gridPosition[0][1] / GRANULARITY,
   });
 });
 
@@ -366,20 +366,20 @@ updates.set(angleMarker, function(circ) {
 
 pathMaterials = {};
 paths = [];
-for (let i=0; i<2*granularity+1; i++) {
-  paths[i] = []; // Row for angle a = (i-granularity)th value in grid
-  for (let j=0; j<2*granularity+1; j++)
-    paths[i][j] = {}; // Col for angle b = (j-granularity)th value in grid
+for (let i=0; i<2*GRANULARITY+1; i++) {
+  paths[i] = []; // Row for angle a = (i-GRANULARITY)th value in grid
+  for (let j=0; j<2*GRANULARITY+1; j++)
+    paths[i][j] = {paths: {}}; // Col for angle b = (j-GRANULARITY)th value in grid
 }
 PATH_LENGTH = 100;
 
-currPathSet = [ paths[gridPosition[0][0]][gridPosition[0][1]] ];
+currPathSet = [ paths[gridPosition[0][0]][gridPosition[0][1]].paths ];
 feedsInto(gridPosition, currPathSet);
 updates.set(currPathSet, function() {
   Object.entries(currPathSet[0]).forEach(([k,p]) => {
     scene.remove(p);
   });
-  currPathSet[0] = paths[gridPosition[0][0]][gridPosition[0][1]];
+  currPathSet[0] = paths[gridPosition[0][0]][gridPosition[0][1]].paths;
 });
 
 updates.set(a_p_b, function(arr) {
@@ -390,7 +390,7 @@ updates.set(a_p_b, function(arr) {
 });
 
 function tracePath(name, currPos, color, pathLen) {
-  let activePaths = paths[gridPosition[0][0]][gridPosition[0][1]];
+  let activePaths = paths[gridPosition[0][0]][gridPosition[0][1]].paths;
   let path = activePaths[name];
   if (path === undefined) {
     let mat = pathMaterials[color];
