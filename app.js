@@ -148,6 +148,7 @@ function arrowLength(arrow, length) {
   arrow.arrowShaft.scale.setComponent(2, shaftLength);
   let zTip = v(0,0,1); zTip.applyQuaternion(arrow.arrowTip.quaternion);
   arrow.arrowTip.position.copy(zTip.multiplyScalar(shaftLength));
+  arrow.scale.setScalar(length < 0 ? -1 : +1);
   arrow.updateMatrixWorld();
 }
 
@@ -386,15 +387,18 @@ for (let i=0; i<2*GRANULARITY+1; i++) {
   for (let j=0; j<2*GRANULARITY+1; j++)
     paths[i][j] = {paths: {}}; // Col for angle b = (j-GRANULARITY)th value in grid
 }
+function gridDataAt([i, j]) {
+  return paths[i+GRANULARITY][j+GRANULARITY];
+}
 PATH_LENGTH = 100;
 
-currPathSet = [ paths[gridPosition[0][0]][gridPosition[0][1]].paths ];
+currPathSet = [ gridDataAt(gridPosition[0]).paths ];
 feedsInto(gridPosition, currPathSet);
 updates.set(currPathSet, function() {
   Object.entries(currPathSet[0]).forEach(([k,p]) => {
     scene.remove(p);
   });
-  currPathSet[0] = paths[gridPosition[0][0]][gridPosition[0][1]].paths;
+  currPathSet[0] = gridDataAt(gridPosition[0]).paths;
 });
 
 updates.set(a_p_b, function(arr) {
@@ -405,7 +409,7 @@ updates.set(a_p_b, function(arr) {
 });
 
 function tracePath(name, currPos, color, pathLen) {
-  let activePaths = paths[gridPosition[0][0]][gridPosition[0][1]].paths;
+  let activePaths = gridDataAt(gridPosition[0]).paths;
   let path = activePaths[name];
   if (path === undefined) {
     let mat = pathMaterials[color];
