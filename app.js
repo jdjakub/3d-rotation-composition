@@ -352,7 +352,6 @@ svg.onclick = e => {
   pos.multiply(v(granularity/halfW, -granularity/halfH, 0)); // in (-12, +12) with Y up
   pos.x = Math.round(pos.x); pos.y = Math.round(pos.y); // snap to grid
   changed(gridPosition, gridPosition[0] = [pos.x, pos.y]);
-  retrace();
 };
 
 feedsInto(gridPosition, angleMarker);
@@ -367,11 +366,20 @@ updates.set(angleMarker, function(circ) {
 
 pathMaterials = {};
 paths = [];
+for (let i=0; i<2*granularity+1; i++) {
+  paths[i] = []; // Row for angle a = (i-granularity)th value in grid
+  for (let j=0; j<2*granularity+1; j++)
+    paths[i][j] = {}; // Col for angle b = (j-granularity)th value in grid
+}
 PATH_LENGTH = 100;
 
-feedsInto(gridPosition, paths);
-updates.set(paths, function() {
-  //retrace();
+currPathSet = [ paths[gridPosition[0][0]][gridPosition[0][1]] ];
+feedsInto(gridPosition, currPathSet);
+updates.set(currPathSet, function() {
+  Object.entries(currPathSet[0]).forEach(([k,p]) => {
+    scene.remove(p);
+  });
+  currPathSet[0] = paths[gridPosition[0][0]][gridPosition[0][1]];
 });
 
 updates.set(a_p_b, function(arr) {
@@ -382,13 +390,14 @@ updates.set(a_p_b, function(arr) {
 });
 
 function tracePath(name, currPos, color, pathLen) {
-  let path = paths[name];
+  let activePaths = paths[gridPosition[0][0]][gridPosition[0][1]];
+  let path = activePaths[name];
   if (path === undefined) {
     let mat = pathMaterials[color];
     if (mat === undefined)
       pathMaterials[color] = mat = new e3.PointsMaterial({ color, size: 0.025 });
 
-    paths[name] = path = new e3.Points(
+    activePaths[name] = path = new e3.Points(
       new e3.BufferGeometry().setAttribute('position',
         new e3.BufferAttribute(
           new Float32Array(pathLen*3), 3
@@ -398,7 +407,9 @@ function tracePath(name, currPos, color, pathLen) {
     path.angleAtStart = interAxisAngle;
     path.prevAngleValue = 0;
     path.finishedTrace = false;
-    scene.add(paths[name]);
+  }
+  if (path.parent !== scene) {
+    scene.add(path);
   }
 
   if (path.finishedTrace) return;
@@ -427,14 +438,6 @@ function tracePath(name, currPos, color, pathLen) {
     ps.updateRange = { offset: currPathLen*3, count: 3 };
     geom.setDrawRange(0, currPathLen+1);
   }
-}
-
-function retrace() {
-  Object.entries(paths).forEach(([k,p]) => {
-    scene.remove(p);
-    p.geometry.dispose();
-    paths[k] = undefined;
-  });
 }
 
 axis_c = newArrow('axis_c', 0x00ff00);
