@@ -5,8 +5,11 @@ final = arr => arr[arr.length-1]
 e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
 turn = frac => 2*Math.PI * frac;
+inTurn = rads => rads / (2*Math.PI);
 deg = degs => turn(degs/360);
+inDeg = rads => 360 * inTurn(rads);
 xtoz = angle => v(Math.cos(angle), 0, Math.sin(angle));
+unsin2 = x => inDeg(Math.asin(x) * 2); // Get angle from a mod-axis
 
 // ### SVG UTILITIES (from my OROM / Id work)
 attr_single = (elem, key, val_or_func) => {
@@ -145,6 +148,7 @@ function arrowLength(arrow, length) {
   arrow.arrowShaft.scale.setComponent(2, shaftLength);
   let zTip = v(0,0,1); zTip.applyQuaternion(arrow.arrowTip.quaternion);
   arrow.arrowTip.position.copy(zTip.multiplyScalar(shaftLength));
+  arrow.updateMatrixWorld();
 }
 
 function arrowThickness(arrow, th) {
@@ -158,7 +162,6 @@ function pointArrow(arrow, target) {
   let delta = v(); arrow.getWorldPosition(delta); delta.sub(target); delta.negate();
   arrow.lookAt(target);
   arrowLength(arrow, delta.length());
-  arrow.updateMatrixWorld();
 }
 
 function asVector(arrow) {
