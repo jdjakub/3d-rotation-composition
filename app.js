@@ -354,6 +354,21 @@ svg.onclick = e => {
   changed(gridPosition, gridPosition[0] = [pos.x, pos.y]);
 };
 
+const KEY_TO_DIR = {
+  q: [-1,+1], w: [ 0,+1], e:[+1,+1],
+  a: [-1, 0], s: [ 0,-1], d:[+1, 0],
+  z: [-1,-1], x: [ 0,-1], c:[+1,-1]
+};
+document.body.onkeydown = ({key}) => {
+  key = key.toLowerCase();
+  let dir = KEY_TO_DIR[key];
+  if (dir !== undefined) {
+    let currPos = gridPosition[0];
+    let newPos = [currPos[0]+dir[0], currPos[1]+dir[1]];
+    changed(gridPosition, gridPosition[0] = newPos);
+  }
+};
+
 feedsInto(gridPosition, angleMarker);
 updates.set(angleMarker, function(circ) {
   attr(angleMarker, {
