@@ -8,48 +8,17 @@ deg = degs => turn(degs/360);
 inDeg = rads => Math.round(360 * inTurn(rads));
 unsin2 = x => Math.asin(x) * 2; // Get angle from a mod-axis
 
-let data = []; // a,b,g
-let exampleData = {
-  a: [], // a,t
-  b: [], // a,b,g,t
-  c: [], // a,b,g,t
-};
+let data = {};
 
 const dAlpha = deg(60);//15);
 const dBeta = deg(60);//15);
 const dGamma = deg(60);//15);
 
-let indices = [-1,-1,-1,-1];
-function newAlpha() {
-  data.push([]);
-  exampleData.a.push([]);
-  exampleData.b.push([]);
-  exampleData.c.push([]);
-  indices[0]++;
-  indices[1] = -1;
-  indices[2] = -1;
-  indices[3] = -1;
-}
-function newBeta() {
-  let iAlpha = indices[0];
-  data[iAlpha].push([]);
-  exampleData.b[iAlpha].push([]);
-  exampleData.c[iAlpha].push([]);
-  indices[1]++;
-  indices[2] = -1;
-  indices[3] = -1;
-}
-function newGamma() {
-  let iAlpha = indices[0];
-  let iBeta = indices[1];
-  data[iAlpha][iBeta].push([]);
-  exampleData.b[iAlpha][iBeta].push([]);
-  exampleData.c[iAlpha][iBeta].push([]);
-  indices[2]++;
-  indices[3] = -1;
-}
-function newTheta(axis) {
-  indices[3]++;
+let indices = [0,0,0,0];
+
+function lazy(obj, key, defaultVal) {
+  if (obj[key] === undefined) obj[key] = defaultVal;
+  return obj[key];
 }
 
 function declare(name, ...rest) {
@@ -60,20 +29,23 @@ function declare(name, ...rest) {
   let iTheta = indices[3];
 
   if (name === 'example') {
-    const [theta, axis, vec_result] = rest;
+    const [axis, vec_result] = rest;
     const arr_result = unv(vec_result);
-    let alpha_slice = exampleData[axis][iAlpha];
+    let root = lazy(data, name, {});
+    let alpha_slice = lazy(lazy(root, axis, []), iAlpha, []);
     let dest;
 
     if (axis === 'a') // axis a: parametrized only on alpha and theta
       dest = alpha_slice;
     else // axis b, c: depends on alpha, beta, gamma and theta
-      dest = alpha_slice[iBeta][iGamma];
+      dest = lazy(lazy(alpha_slice, iBeta, []), iGamma, []);
 
     dest[iTheta] = arr_result;
   } else {
     let [result] = rest;
-    data[iAlpha][iBeta][iGamma][name] = typeof(result) === 'number' ? result : unv(result);
+    let root = lazy(data, name, []);
+    lazy(lazy(root, iAlpha, []), iBeta, [])[iGamma] =
+      typeof(result) === 'number' ? result : unv(result);
   }
 }
 
@@ -81,22 +53,25 @@ const example_vec = v(1,1,0).normalize();
 let q = new e3.Quaternion();
 
 function rotateUpTo(vec, axis, axisName, angle) {
-  if (angle === 0) return example_vec; // 0 int - careful...!
-
   const dTheta = angle/3;
-  let vec_rotated = v();
-  for (let theta = dTheta; theta <= angle; theta += dTheta) {
-    newTheta(axis); log(`            θ (${axisName})`, inDeg(theta));
+  let vec_rotated = example_vec.clone();
+  for (indices[3] = 0; indices[3] <= angle/dTheta; indices[3]++) {
+    const theta = indices[3] * dTheta;
+    log(`            θ (${axisName})`, inDeg(theta));
     q.setFromAxisAngle(axis, theta);
     vec_rotated.copy(vec).applyQuaternion(q);
-    declare('example', theta, axisName, vec_rotated);
+    declare('example', axisName, vec_rotated);
   }
+  if (angle === 0) declare('example', axisName, vec_rotated);
   return vec_rotated;
 }
 
 // Alpha is the angle around the first axis, axis a.
-for (let alpha = 0; alpha <= deg(180); alpha += dAlpha) {
-  newAlpha(); log('α', inDeg(alpha));
+for (indices[0] = 0; indices[0] <= deg(180)/dAlpha; indices[0]++) {
+  const iAlpha = indices[0];
+  const alpha = iAlpha * dAlpha;
+  log('α', inDeg(alpha));
+
   const c_a2 = Math.cos(alpha/2);
   const s_a2 = Math.sin(alpha/2);
   const axis_a = v(1,0,0);
@@ -108,14 +83,20 @@ for (let alpha = 0; alpha <= deg(180); alpha += dAlpha) {
   );
 
   // Beta is the angle around the second axis, axis b.
-  for (let beta = 0; beta <= deg(180); beta += dBeta) {
-    newBeta(); log('  β', inDeg(beta));
+  for (indices[1] = 0; indices[1] <= deg(180)/dBeta; indices[1]++) {
+    const iBeta = indices[1];
+    const beta = iBeta * dBeta;
+    log('  β', inDeg(beta));
+
     const c_b2 = Math.cos(beta/2);
     const s_b2 = Math.sin(beta/2);
 
     // Gamma is the angle between the two axes.
-    for (let gamma = 0; gamma <= deg(180); gamma += dGamma) {
-      newGamma(); log(`α ${inDeg(alpha)} β ${inDeg(beta)} γ`, inDeg(gamma));
+    for (indices[2] = 0; indices[2] <= deg(180)/dGamma; indices[2]++) {
+      const iGamma = indices[2];
+      const gamma = iGamma * dGamma;
+      log(`α ${inDeg(alpha)} β ${inDeg(beta)} γ`, inDeg(gamma));
+
       const decl = (name, value) => declare(name, value);
       const c_g = Math.cos(gamma);
       const s_g = Math.sin(gamma);
@@ -142,7 +123,6 @@ for (let alpha = 0; alpha <= deg(180); alpha += dAlpha) {
       const angle_c = unsin2(maxis_c.length());
       decl('angle_c', angle_c);
 
-      indices[3] = 0; // nasty
       // Record rotation path around the composite axis
       rotateUpTo(example_vec, axis_c, 'c', angle_c);
     }
