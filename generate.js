@@ -13,8 +13,9 @@ let data = {};
 const dAlpha = deg(60);//15);
 const dBeta = deg(60);//15);
 const dGamma = deg(60);//15);
+const max_iTheta = 3;
 
-let indices = [0,0,0,0];
+let indices = [0,0,0,0]; // alpha, beta, gamma, theta
 
 function lazy(obj, key, defaultVal) {
   if (obj[key] === undefined) obj[key] = defaultVal;
@@ -53,16 +54,15 @@ const example_vec = v(1,1,0).normalize();
 let q = new e3.Quaternion();
 
 function rotateUpTo(vec, axis, axisName, angle) {
-  const dTheta = angle/3;
+  const dTheta = angle/max_iTheta;
   let vec_rotated = example_vec.clone();
-  for (indices[3] = 0; indices[3] <= angle/dTheta; indices[3]++) {
+  for (indices[3] = 0; indices[3] <= max_iTheta; indices[3]++) {
     const theta = indices[3] * dTheta;
     log(`            θ (${axisName})`, inDeg(theta));
     q.setFromAxisAngle(axis, theta);
     vec_rotated.copy(vec).applyQuaternion(q);
     declare('example', axisName, vec_rotated);
   }
-  if (angle === 0) declare('example', axisName, vec_rotated);
   return vec_rotated;
 }
 
