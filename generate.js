@@ -50,6 +50,16 @@ function declare(name, ...rest) {
   }
 }
 
+function exportData(objPath) {
+  objPath = objPath.split('.');
+  let o = data;
+  objPath.forEach(key => {o = o[key]});
+  const filename = objPath.join('-') + '.dat';
+
+  let f32arr = new Float32Array(o.flat(4));
+  download(f32arr, filename, 'application/octet-stream');
+}
+
 const example_vec = v(1,1,0).normalize();
 let q = new e3.Quaternion();
 
