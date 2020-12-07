@@ -1,7 +1,7 @@
 log = (...args) => { console.log(...args); return args ? args[0] : undefined };
 e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
-unv = vec => [vec.x, vec.y, vec.x];
+unv = vec => [vec.x, vec.y, vec.z];
 turn = frac => 2*Math.PI * frac;
 inTurn = rads => rads / (2*Math.PI);
 deg = degs => turn(degs/360);
@@ -10,10 +10,16 @@ unsin2 = x => Math.asin(x) * 2; // Get angle from a mod-axis
 
 let data = {};
 
-const dAlpha = deg(60);//15);
-const dBeta = deg(60);//15);
-const dGamma = deg(60);//15);
-const max_iTheta = 3;
+// 0, 60, 120, 180 deg
+const max_iAlpha = 12;
+const max_iBeta  = 12;
+const max_iGamma = 12;
+const max_iTheta = 12;
+
+const num_iAlpha = max_iAlpha+1;
+const num_iBeta  = max_iBeta+1;
+const num_iGamma = max_iGamma+1;
+const num_iTheta = max_iTheta+1;
 
 let indices = [0,0,0,0]; // alpha, beta, gamma, theta
 
@@ -50,6 +56,17 @@ function declare(name, ...rest) {
   }
 }
 
+// Returns [vertex number of 1st vertex, count of vertices]
+function getDrawRange(obj, iAlpha, iBeta, iGamma) {
+  if (obj === data.example.a) {
+    return [iAlpha * num_iTheta, num_iTheta];
+  } else if (obj === data.example.b || obj === data.example.c) {
+    return [ ((iAlpha * num_iBeta + iBeta) * num_iGamma + iGamma) * num_iTheta, num_iTheta ];
+  } else {
+    return [ (iAlpha * num_iBeta + iBeta) * num_iGamma, num_iGamma ];
+  }
+}
+
 function exportData(objPath) {
   objPath = objPath.split('.');
   let o = data;
@@ -77,8 +94,9 @@ function rotateUpTo(vec, axis, axisName, angle) {
 }
 
 // Alpha is the angle around the first axis, axis a.
-for (indices[0] = 0; indices[0] <= deg(180)/dAlpha; indices[0]++) {
+for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
   const iAlpha = indices[0];
+  const dAlpha = deg(180) / max_iAlpha;
   const alpha = iAlpha * dAlpha;
   log('α', inDeg(alpha));
 
@@ -88,13 +106,14 @@ for (indices[0] = 0; indices[0] <= deg(180)/dAlpha; indices[0]++) {
   const maxis_a = v(s_a2,0,0);
 
   // Record the rotation path of example vector around axis a
-  const example_rot_a = rotateUpTo(
+  /*const example_rot_a = rotateUpTo(
     example_vec, axis_a, 'a', alpha
-  );
+  );*/
 
   // Beta is the angle around the second axis, axis b.
-  for (indices[1] = 0; indices[1] <= deg(180)/dBeta; indices[1]++) {
+  for (indices[1] = 0; indices[1] <= max_iBeta; indices[1]++) {
     const iBeta = indices[1];
+    const dBeta = deg(180) / max_iBeta;
     const beta = iBeta * dBeta;
     log('  β', inDeg(beta));
 
@@ -102,8 +121,9 @@ for (indices[0] = 0; indices[0] <= deg(180)/dAlpha; indices[0]++) {
     const s_b2 = Math.sin(beta/2);
 
     // Gamma is the angle between the two axes.
-    for (indices[2] = 0; indices[2] <= deg(180)/dGamma; indices[2]++) {
+    for (indices[2] = 0; indices[2] <= max_iGamma; indices[2]++) {
       const iGamma = indices[2];
+      const dGamma = deg(180) / max_iGamma;
       const gamma = iGamma * dGamma;
       log(`α ${inDeg(alpha)} β ${inDeg(beta)} γ`, inDeg(gamma));
 
@@ -112,26 +132,26 @@ for (indices[0] = 0; indices[0] <= deg(180)/dAlpha; indices[0]++) {
       const s_g = Math.sin(gamma);
       const axis_b = v(c_g, 0, s_g);
       const maxis_b = v(s_b2*c_g, 0, s_b2*s_g);
-      decl('maxis_b', maxis_b);
+      //decl('maxis_b', maxis_b);
 
       // After rotating around axis a, record rotation path around axis b
-      rotateUpTo(example_rot_a, axis_b, 'b', beta);
+      //rotateUpTo(example_rot_a, axis_b, 'b', beta);
 
       let a_p_b = maxis_a.clone().multiplyScalar(c_b2);
       a_p_b.add(maxis_b.clone().multiplyScalar(c_a2));
-      decl('a_p_b', a_p_b);
+      //decl('a_p_b', a_p_b);
 
       const a_x_b = maxis_a.clone().cross(maxis_b);
-      decl('a_x_b', a_x_b);
+      //decl('a_x_b', a_x_b);
 
       const maxis_c = a_p_b.add(a_x_b);
-      decl('maxis_c', maxis_c);
+      //decl('maxis_c', maxis_c);
 
       const axis_c = maxis_c.clone().normalize();
-      decl('axis_c', axis_c);
+      //decl('axis_c', axis_c);
 
       const angle_c = unsin2(maxis_c.length());
-      decl('angle_c', angle_c);
+      //decl('angle_c', angle_c);
 
       // Record rotation path around the composite axis
       rotateUpTo(example_vec, axis_c, 'c', angle_c);

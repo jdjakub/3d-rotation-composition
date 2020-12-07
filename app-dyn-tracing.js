@@ -392,73 +392,6 @@ function gridDataAt([i, j]) {
 }
 PATH_LENGTH = 100;
 
-// BEGIN HORRIBLE SPECIAL CASED HARD CODED THROWAWAY
-rotPathRoundA = undefined;
-rotPathRoundB = undefined;
-
-// Must load A dat then B dat, EVERY RELOAD >.<
-document.getElementById('uploadPathData').onchange = function() {
-  this.files[0].arrayBuffer().then(buf => {
-    if (rotPathRoundA === undefined) {
-      rotPathRoundA = new e3.Points(
-        new e3.BufferGeometry().setAttribute('position',
-          new e3.BufferAttribute(
-            new Float32Array(buf), 3
-          )), new e3.PointsMaterial({color: 0xffffff, size: 0.025})
-      );
-      scene.add(rotPathRoundA);
-      feedsInto(gridPosition, rotPathRoundA);
-      updates.set(rotPathRoundA, function() {
-        const iAlpha = gridPosition[0][0];
-        if (iAlpha >= 0)
-          rotPathRoundA.geometry.setDrawRange(iAlpha * 13, 13);
-      });
-      updates.get(rotPathRoundA)();
-    } else if (rotPathRoundB === undefined) {
-      rotPathRoundB = new e3.Points(
-        new e3.BufferGeometry().setAttribute('position',
-          new e3.BufferAttribute(
-            new Float32Array(buf), 3
-          )), new e3.PointsMaterial({color: 0xffffff, size: 0.025})
-      );
-      scene.add(rotPathRoundB);
-      feedsInto(gridPosition, rotPathRoundB);
-      updates.set(rotPathRoundB, function() {
-        const iAlpha = gridPosition[0][0];
-        const iBeta = gridPosition[0][1];
-        let iGammaSigned = iaaQuantized;
-        if (iGammaSigned > 12) iGammaSigned -= 24; // -12 to 12
-        let iGamma = iGammaSigned;
-        let startVertexNo;
-        if (iGammaSigned < 0) iGamma += 12; // so -11 -> 1, -10 -> 2 etc
-        startVertexNo = ((iAlpha * 13 + iBeta) * 13 + iGamma) * 13;
-        if (iGammaSigned < 0) {
-          //log('Negative');
-          const i = startVertexNo;
-          const va = rotPathRoundB.geometry.getAttribute('position');
-          let posAtTheta0 = v(va.getX(i), va.getY(i), va.getZ(i));
-          let r = posAtTheta0.cross(asVector(axis_b)).normalize();
-          rotPathRoundB.matrix.set(
-            1 - 2*r.x*r.x,   - 2*r.x*r.y,   - 2*r.x*r.z, 0,
-              - 2*r.x*r.y, 1 - 2*r.y*r.y,   - 2*r.y*r.z, 0,
-              - 2*r.x*r.z,   - 2*r.y*r.z, 1 - 2*r.z*r.z, 0,
-                      0,           0,           0, 1
-          );
-          rotPathRoundB.matrixAutoUpdate = false;
-        } else {
-          //log('Positive');
-          rotPathRoundB.matrix.identity();
-          rotPathRoundB.matrixAutoUpdate = true;
-        }
-        if (iAlpha >= 0 && iBeta >= 0)
-          rotPathRoundB.geometry.setDrawRange(startVertexNo, 13);
-      });
-      rotPathRoundB.geometry.setDrawRange(0,0);
-    }
-  });
-};
-// END HORRIBLE SPECIAL CASED HARD CODED THROWAWAY
-
 currPathSet = [ gridDataAt(gridPosition[0]).paths ];
 feedsInto(gridPosition, currPathSet);
 updates.set(currPathSet, function() {
@@ -476,7 +409,6 @@ updates.set(a_p_b, function(arr) {
 });
 
 function tracePath(name, currPos, color, pathLen) {
-  return;
   let activePaths = gridDataAt(gridPosition[0]).paths;
   let path = activePaths[name];
   if (path === undefined) {
@@ -569,22 +501,14 @@ scene.add(ambientLight);
 // ### ANIMATION
 
 animating = true;
-degPerS = 30;
+degPerS = 90;
 lastTimeMs = undefined;
 interAxisAngle = 0;
-iaaQuantized = 0;
-prev_iaaQuantized = 0;
 
-viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(degs)).multiplyScalar(s_b2[0])));
+viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(-degs)).multiplyScalar(s_b2[0])));
 
 function tick(deltaS) {
   viz(interAxisAngle);
-  prev_iaaQuantized = iaaQuantized;
-  iaaQuantized = Math.round((interAxisAngle)/15); // 0 to 24
-  if (rotPathRoundB !== undefined) {
-    if (prev_iaaQuantized !== iaaQuantized)
-      updates.get(rotPathRoundB)();
-  }
   tracePath('b_path', asVector(axis_b), 0xff0000, PATH_LENGTH);
   interAxisAngle += degPerS * deltaS;
   interAxisAngle = interAxisAngle % 360;
