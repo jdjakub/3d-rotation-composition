@@ -23,3 +23,17 @@ Key:
 * The **yellow** vector is the cross of the two mod-axes a and b.
 * The **blue** vector is the **composite axis** (a followed by b); it is the *normalisation* of the green vector.
 * The **green** vector is the **composite mod-axis.**
+
+# Running
+## Without rotation paths (no python, discontinued)
+Change `index.html` to load `app-dyn-tracing.js` instead of `app.js` and open `index.html`.
+
+## With rotation paths (requires python3, active)
+Run `./cors-server.py` in the project directory so the `FileLoader` requests get served. Open `index.html` (loads `app.js`) in browser.
+
+Currently I've disabled path tracing in this one as I want to generate all the data in bulk (`generate.py`) and just load it into the web app, and spend CPU only on animation.
+
+(NB: *The goddamn stupid CORS nonsense is always the bane of my life at some inevitable point in developing a web app (especially one with 3D graphics or extensive computation). I researched convoluted ways of smuggling the data through image elements, etc. but eventually gave in and ran a copy-pasted Python server.*
+
+*Here's an idea: if "security" is so important, why can't local file requests just go through a permission prompt just like everything else? "This web page is requesting read access to this file on your system. Do you grant it permission?" instead of a flat-out blanket ban on local FS access? Why not let the user decide? Beats me.*
+)
