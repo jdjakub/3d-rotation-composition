@@ -26,13 +26,13 @@ Key:
 
 In full, the composite mod-axis is given by this formula:
 
-<img src="https://render.githubusercontent.com/render/math?math=\cos(b/2)\mathbf{a} + \cos(a/2)\mathbf{b} + \mathbf{a} \times \mathbf{b}">
+<img src="https://render.githubusercontent.com/render/math?math=\cos(b/2)\mathbf{a} %2B \cos(a/2)\mathbf{b} %2B \mathbf{a} \times \mathbf{b}">
 
 Where boldface **a** and **b** are the first and second mod-axes, and *a* and *b* are the angles around each axis.
 
 Since the magnitude of the composite mod-axis is the sine of half the composite angle, this can be inverted to find the composite angle. However, in practice I found I still needed the cos half-angle... in spite of the above remarks on the bijective property... it's given by this:
 
-<img src="https://render.githubusercontent.com/render/math?math=\cos(c/2) = \cos(a/2)\cos(b/2) - \mathbf{a} \cdot \mathbf{b}">
+<img src="https://render.githubusercontent.com/render/math?math=\cos(c/2) %3D \cos(a/2)\cos(b/2) - \mathbf{a} \cdot \mathbf{b}">
 
 # Running
 ## Without rotation paths (no python, discontinued)
