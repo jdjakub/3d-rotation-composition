@@ -395,6 +395,7 @@ PATH_LENGTH = 100;
 // BEGIN HORRIBLE FILE LOADING AND ROTATION PATH TRANSFORMATION SECTION
 rotPathRoundA = undefined;
 rotPathRoundB = undefined;
+rotPathRoundC = undefined;
 
 loader = new e3.FileLoader().setResponseType('arraybuffer');
 e3.Cache.enabled = true;
@@ -404,9 +405,9 @@ loader.load('http://localhost:8000/example-a.dat', buf => {
   if (rotPathRoundA !== undefined) return;
   rotPathRoundA = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(
-        new Float32Array(buf), 3
-      )), new e3.PointsMaterial({color: 0xffffff, size: 0.025})
+      new e3.BufferAttribute(new Float32Array(buf), 3)
+    ),
+    new e3.PointsMaterial({color: 0xff7fff, size: 0.025})
   );
   scene.add(rotPathRoundA);
   feedsInto(gridPosition, rotPathRoundA);
@@ -423,9 +424,9 @@ loader.load('http://localhost:8000/example-b.dat', buf => {
   if (rotPathRoundB !== undefined) return;
   rotPathRoundB = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(
-        new Float32Array(buf), 3
-      )), new e3.PointsMaterial({color: 0xffffff, size: 0.025})
+      new e3.BufferAttribute(new Float32Array(buf), 3)
+    ),
+    new e3.PointsMaterial({color: 0xff00ff, size: 0.025})
   );
   scene.add(rotPathRoundB);
   feedsInto(gridPosition, rotPathRoundB);
@@ -433,17 +434,33 @@ loader.load('http://localhost:8000/example-b.dat', buf => {
     const iAlpha = gridPosition[0][0];
     const iBeta = gridPosition[0][1];
     let iGammaSigned = iaaQuantized;
-    if (iGammaSigned > 12) iGammaSigned -= 24; // -12 to 12
+    if (iGammaSigned > 12) iGammaSigned -= 24; // -11 to 12
     let iGamma = iGammaSigned;
     let startVertexNo;
+    // Want to incorporate the symmetry that when gamma (the angle between axes
+    // A and B) = 180+x, axis B is simply negated from when gamma = +x,
+    // a.k.a. negated angle B.
+    // As iaaQuantized goes from 0 to 24, iGammaSigned goes from 0 to 12,
+    // then -11 up to 0.
+    // At, say, iaaQuantized=13, iGammaSigned=-11, we want to re-use the
+    // computed data for iGamma = +1.
     if (iGammaSigned < 0) iGamma += 12; // so -11 -> 1, -10 -> 2 etc
     startVertexNo = ((iAlpha * 13 + iBeta) * 13 + iGamma) * 13;
     if (iGammaSigned < 0) {
-      //log('Negative');
+      // A negated B axis is equivalent to negated B angle. We re-use the
+      // rotation path around axis B, starting from wherever it starts at
+      // theta=0. If it's clockwise, we need to reflect it to be anti-CW, and
+      // vice versa; still starting from the same theta=0 position.
       const i = startVertexNo;
       const va = rotPathRoundB.geometry.getAttribute('position');
       let posAtTheta0 = v(va.getX(i), va.getY(i), va.getZ(i));
       let r = posAtTheta0.cross(asVector(axis_b)).normalize();
+      // The origin-theta0-theta180 plane is the plane of symmetry. Each pos p
+      // on the rotation path transforms to: p - 2(p.n)n, where n is the plane
+      // normal.
+      // Rewritten Ip - 2n(n^T p) = (I - 2nn^T)p
+      // I - 2nn^T is the reflection matrix; I=identity, n^T = transpose of n.
+      // TODO: This diverges slightly from the C data. Investigate
       rotPathRoundB.matrix.set(
         1 - 2*r.x*r.x,   - 2*r.x*r.y,   - 2*r.x*r.z, 0,
           - 2*r.x*r.y, 1 - 2*r.y*r.y,   - 2*r.y*r.z, 0,
@@ -460,6 +477,27 @@ loader.load('http://localhost:8000/example-b.dat', buf => {
       rotPathRoundB.geometry.setDrawRange(startVertexNo, 13);
   });
   rotPathRoundB.geometry.setDrawRange(0,0);
+}, undefined /*progress handler*/, undefined /*error handler*/);
+
+loader.load('http://localhost:8000/example-c.dat', buf => {
+  if (rotPathRoundC !== undefined) return;
+  rotPathRoundC = new e3.Points(
+    new e3.BufferGeometry().setAttribute('position',
+      new e3.BufferAttribute(new Float32Array(buf), 3)
+    ), new e3.PointsMaterial({color: 0x7f00ff, size: 0.025})
+  );
+  scene.add(rotPathRoundC);
+  feedsInto(gridPosition, rotPathRoundC);
+  updates.set(rotPathRoundC, function() {
+    const iAlpha = gridPosition[0][0];
+    const iBeta = gridPosition[0][1];
+    let iGamma = iaaQuantized;
+    let startVertexNo = ((iAlpha * 13 + iBeta) * 25 + iGamma) * 13;
+    log(iGamma);
+    if (iAlpha >= 0 && iBeta >= 0)
+      rotPathRoundC.geometry.setDrawRange(startVertexNo, 13);
+  });
+  rotPathRoundC.geometry.setDrawRange(0,0);
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
 // END HORRIBLE FILE LOADING AND ROTATION PATH TRANSFORMATION SECTION
@@ -576,8 +614,8 @@ scene.add(ambientLight);
 animating = true;
 degPerS = 30;
 lastTimeMs = undefined;
-interAxisAngle = 0;
-iaaQuantized = 0;
+interAxisAngle = 0; // 0 <= < 360
+iaaQuantized = 0;   // 0 <= < 24
 prev_iaaQuantized = 0;
 
 viz = degs => changed(axis_b, pointArrow(axis_b, xtoz(deg(degs)).multiplyScalar(s_b2[0])));
@@ -587,8 +625,10 @@ function tick(deltaS) {
   prev_iaaQuantized = iaaQuantized;
   iaaQuantized = Math.round((interAxisAngle)/15); // 0 to 24
   if (rotPathRoundB !== undefined) {
-    if (prev_iaaQuantized !== iaaQuantized)
+    if (prev_iaaQuantized !== iaaQuantized) {
       updates.get(rotPathRoundB)();
+      updates.get(rotPathRoundC)();
+    }
   }
   tracePath('b_path', asVector(axis_b), 0xff0000, PATH_LENGTH);
   interAxisAngle += degPerS * deltaS;

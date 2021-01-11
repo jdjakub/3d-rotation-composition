@@ -22,7 +22,17 @@ Key:
 * The **orange** vector is roughly the "a plus b" vector (`a_p_b`). *(Actually, it is cos-half-angle-b times `axis_a` + cos-half-angle-a times `axis_b`)*
 * The **yellow** vector is the cross of the two mod-axes a and b.
 * The **blue** vector is the **composite axis** (a followed by b); it is the *normalisation* of the green vector.
-* The **green** vector is the **composite mod-axis.**
+* The **green** vector is the **composite mod-axis.** This is the sum of the orange `a_p_b` and the yellow `a_x_b` vector.
+
+In full, the composite mod-axis is given by this formula:
+
+<img src="https://render.githubusercontent.com/render/math?math=\cos(b/2)\mathbf{a} + \cos(a/2)\mathbf{b} + \mathbf{a} \times \mathbf{b}">
+
+Where boldface **a** and **b** are the first and second mod-axes, and *a* and *b* are the angles around each axis.
+
+Since the magnitude of the composite mod-axis is the sine of half the composite angle, this can be inverted to find the composite angle. However, in practice I found I still needed the cos half-angle... in spite of the above remarks on the bijective property... it's given by this:
+
+<img src="https://render.githubusercontent.com/render/math?math=\cos(c/2) = \cos(a/2)\cos(b/2) - \mathbf{a} \cdot \mathbf{b}">
 
 # Running
 ## Without rotation paths (no python, discontinued)
