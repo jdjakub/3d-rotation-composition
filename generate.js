@@ -134,9 +134,6 @@ or
                        + γ * num_iTheta
                                     + θ
 And index i represents ... er... TBA
-
-TODO: metadata in file format to avoid hardcoded numbers in app.js
-
 */
 
 // The Example Vector is rotated in order to concretely visualize the
