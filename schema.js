@@ -26,7 +26,86 @@ Too easy. Say, for 0-based float index 123:
 Turn into Kaitai struct format?
 */
 
-exampleSchemas = [{
+class ParamSchema {
+  constructor(spec) {
+    Object.assign(this, spec);
+    this.blockSize = spec.howMany;
+    this.howMany = undefined;
+    if (this.blockSize === undefined)
+      this.blockSize = this.maxValue+1 - this.minValue;
+  }
+
+  factorIndex(i) { // bottom up
+    // Goal: factor i as i = j*L + n, where L is the length of blocks at this
+    // index level, j is the new index passed up, and n identifies the value of
+    // the parameter.
+    const L = this.blockSize;
+
+    const j = Math.floor(i / L);
+    const n = i % L;
+
+    return { blockIndex: j, paramIndex: n };
+  }
+
+  resolveValues(params) {
+    // If minValue or maxValue is a string referring to a param e.g. 'alpha'
+    // then resolve it to the actual value of the param
+    if (typeof this.minValue === 'string') // e.g. 'alpha' (current value thereof)
+      this.minValue = params[this.minValue].value;
+
+    if (typeof this.maxValue === 'string') // e.g. 'alpha' (current value thereof)
+      this.maxValue = params[this.maxValue].value;
+  }
+}
+
+class NestedSchemas {
+  constructor(list) {
+    this.list = list;
+    this.byName = {};
+    list.forEach(schema => { this.byName[schema.name] = schema; });
+  }
+
+  interpretIndex(index) {
+    let params = {};
+
+    this.list.slice().reverse().forEach(schema => {
+      const {blockIndex, paramIndex} = schema.factorIndex(index);
+      params[schema.name] = { index: paramIndex };
+      index = blockIndex;
+    });
+
+    this.list.forEach(schema => this.interpretParam(schema.name, params));
+
+    return params;
+  }
+
+  interpretParam(name, params) { // top down
+    let thisParam = params[name];
+    let thisSchema = this.byName[name];
+    // Goal: figure out what value thisParam.index represents.
+    const L = thisSchema.blockSize;
+    if (L === undefined)
+      thisParam.value = thisParam.index; // By default, value = index
+    else {
+      thisSchema.resolveValues(params);
+      // f(0) = min, f(L-1) = max, f(x) = x*(max-min)/(L-1) + min
+      let interpolateParam = (min, x, max) => x * (max-min) / (L-1) + min;
+      thisParam.value = interpolateParam(
+        thisSchema.minValue, thisParam.index, thisSchema.maxValue
+      );
+    }
+  }
+
+  // ((a1 * b2 + b1) * c2 + c1) * d2 + d1 ...
+  paramsToIndex(params) {
+    return this.list.reduce((acc, schema) => {
+      let p = params[schema.name];
+      return acc * schema.blockSize + p.index;
+    }, 0);
+  }
+}
+
+exampleSchemas = new NestedSchemas([{
   name: 'alpha',
   desc: 'angle around axis A',
   howMany: 3, minValue: 0, maxValue: 180, units: 'deg',
@@ -48,65 +127,9 @@ exampleSchemas = [{
         "1=y (projection onto Y axis, orthonormal to axis A and the Z axis)\n" +
         "2=z (projection onto Z axis, where gamma = 90deg)",
   minValue: 0, maxValue: 2
-}];
+}].map(s => new ParamSchema(s)));
 
-function interpretIndex(index, schemaList) {
-  let schemas = {};
-  let params = {};
-  for (let i=schemaList.length-1; i>=0; i--) {
-    let schema = schemaList[i];
-    schemas[schema.name] = schema;
-    let {blockIndex, paramIndex} = factorIndex(index, schema);
-    params[schema.name] = { index: paramIndex };
-    index = blockIndex;
-  }
-
-  for (let i=0; i<schemaList.length; i++) {
-    let schema = schemaList[i];
-    interpretParam(schema.name, params, schemas);
-  }
-
-  return params;
-};
-
-function factorIndex(i, schema) { // bottom up
-  // Goal: factor i as i = j*L + n, where L is the length of blocks at this
-  // index level, j is the new index passed up, and n identifies the value of
-  // the parameter.
-  let blockSize = schema.howMany; // L
-  if (blockSize === undefined) blockSize = schema.maxValue - schema.minValue + 1;
-
-  let j = Math.floor(i / blockSize);
-  let n = i % blockSize;
-
-  return { blockIndex: j, paramIndex: n };
-}
-
-function interpretParam(name, params, schemas) { // top down
-  let thisParam = params[name];
-  let thisSchema = schemas[name];
-  // Goal: figure out what value thisParam.index represents.
-  if (thisSchema.howMany === undefined)
-    thisParam.value = thisParam.index; // By default, value = index
-  else {
-    let L = thisSchema.howMany;
-
-    let minVal = thisSchema.minValue;
-    if (typeof minVal === 'string') // e.g. 'alpha' (current value thereof)
-      minVal = params[minVal].value;
-
-    let maxVal = thisSchema.maxValue;
-    if (typeof maxVal === 'string') // e.g. 'alpha' (current value thereof)
-      maxVal = params[maxVal].value;
-
-    // f(0) = min, f(L-1) = max, f(x) = x*(max-min)/(L-1) + min
-    let interpolateParam = (min, x, max) => x * (max-min) / (L-1) + min;
-
-    thisParam.value = interpolateParam(minVal, thisParam.index, maxVal);
-  }
-}
-
-exampleParams = interpretIndex(234, exampleSchemas);
+exampleParams = exampleSchemas.interpretIndex(234);
 console.log(exampleParams);
 
 /*
@@ -117,14 +140,4 @@ beta: 2 = 0 * 4 + 2 => 120 deg
 alpha: 0 => 0
 */
 
-// ((a1 * b2 + b1) * c2 + c1) * d2 + d1 ...
-function paramsToIndex(params, schemaList) {
-  return schemaList.reduce((acc, schema) => {
-    let p = params[schema.name];
-    let blockSize = schema.howMany; // repeated from above - refactor!
-    if (blockSize === undefined) blockSize = schema.maxValue - schema.minValue + 1;
-    return acc * blockSize + p.index;
-  }, 0);
-}
-
-console.log(paramsToIndex(exampleParams, exampleSchemas));
+console.log(exampleSchemas.paramsToIndex(exampleParams));
