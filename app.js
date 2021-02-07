@@ -401,11 +401,12 @@ loader = new e3.FileLoader().setResponseType('arraybuffer');
 e3.Cache.enabled = true;
 
 // Load axis A rotation data
-loader.load('http://localhost:8000/example-a.dat', buf => {
+loader.load('http://localhost:8000/example-a-selfdoc.dat', buf => {
   if (rotPathRoundA !== undefined) return;
+  const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundA = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(new Float32Array(buf), 3)
+      new e3.BufferAttribute(floats, 3)
     ),
     new e3.PointsMaterial({color: 0xff7fff, size: 0.025})
   );
@@ -413,18 +414,22 @@ loader.load('http://localhost:8000/example-a.dat', buf => {
   feedsInto(gridPosition, rotPathRoundA);
   updates.set(rotPathRoundA, function() {
     const iAlpha = gridPosition[0][0];
-    if (iAlpha >= 0)
-      rotPathRoundA.geometry.setDrawRange(iAlpha * 13, 13);
+    if (iAlpha >= 0) {
+      const iStartVertex = schemas.paramsToIndex({ alpha: iAlpha, theta: 0 });
+      const numVertices = schemas.byName['theta'].howMany;
+      rotPathRoundA.geometry.setDrawRange(iStartVertex, numVertices);
+    }
   });
   updates.get(rotPathRoundA)();
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
 // Load axis B rotation data
-loader.load('http://localhost:8000/example-b.dat', buf => {
+loader.load('http://localhost:8000/example-b-selfdoc.dat', buf => {
   if (rotPathRoundB !== undefined) return;
+  const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundB = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(new Float32Array(buf), 3)
+      new e3.BufferAttribute(floats, 3)
     ),
     new e3.PointsMaterial({color: 0xff00ff, size: 0.025})
   );
@@ -445,7 +450,10 @@ loader.load('http://localhost:8000/example-b.dat', buf => {
     // At, say, iaaQuantized=13, iGammaSigned=-11, we want to re-use the
     // computed data for iGamma = +1.
     if (iGammaSigned < 0) iGamma += 12; // so -11 -> 1, -10 -> 2 etc
-    startVertexNo = ((iAlpha * 13 + iBeta) * 13 + iGamma) * 13;
+    const iStartVertex = schemas.paramsToIndex({
+      alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
+    });
+    const numVertices = schemas.byName['theta'].howMany;
     if (iGammaSigned < 0) {
       // A negated B axis is equivalent to negated B angle. We re-use the
       // rotation path around axis B, starting from wherever it starts at
@@ -474,16 +482,17 @@ loader.load('http://localhost:8000/example-b.dat', buf => {
       rotPathRoundB.matrixAutoUpdate = true;
     }
     if (iAlpha >= 0 && iBeta >= 0)
-      rotPathRoundB.geometry.setDrawRange(startVertexNo, 13);
+      rotPathRoundB.geometry.setDrawRange(iStartVertex, numVertices);
   });
   rotPathRoundB.geometry.setDrawRange(0,0);
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
-loader.load('http://localhost:8000/example-c.dat', buf => {
+loader.load('http://localhost:8000/example-c-selfdoc.dat', buf => {
   if (rotPathRoundC !== undefined) return;
+  const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundC = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(new Float32Array(buf), 3)
+      new e3.BufferAttribute(floats, 3)
     ), new e3.PointsMaterial({color: 0x7f00ff, size: 0.025})
   );
   scene.add(rotPathRoundC);
@@ -492,10 +501,14 @@ loader.load('http://localhost:8000/example-c.dat', buf => {
     const iAlpha = gridPosition[0][0];
     const iBeta = gridPosition[0][1];
     let iGamma = iaaQuantized;
-    let startVertexNo = ((iAlpha * 13 + iBeta) * 25 + iGamma) * 13;
     log(iGamma);
-    if (iAlpha >= 0 && iBeta >= 0)
-      rotPathRoundC.geometry.setDrawRange(startVertexNo, 13);
+    if (iAlpha >= 0 && iBeta >= 0) {
+      const iStartVertex = schemas.paramsToIndex({
+        alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
+      });
+      const numVertices = schemas.byName['theta'].howMany;
+      rotPathRoundC.geometry.setDrawRange(iStartVertex, numVertices);
+    }
   });
   rotPathRoundC.geometry.setDrawRange(0,0);
 }, undefined /*progress handler*/, undefined /*error handler*/);
@@ -626,8 +639,8 @@ function tick(deltaS) {
   iaaQuantized = Math.round((interAxisAngle)/15); // 0 to 24
   if (rotPathRoundB !== undefined) {
     if (prev_iaaQuantized !== iaaQuantized) {
-      updates.get(rotPathRoundB)();
-      updates.get(rotPathRoundC)();
+      let f = updates.get(rotPathRoundB); if (f) f();
+      f = updates.get(rotPathRoundC); if (f) f();
     }
   }
   tracePath('b_path', asVector(axis_b), 0xff0000, PATH_LENGTH);

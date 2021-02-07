@@ -1,3 +1,9 @@
+// uses schemas.js
+// NB: tried ES6 modules, tells me I need to change from "text/javascript" to
+// "module". I change to "module", and then it greets me with a beloved Same-
+// Origin Policy error. Apparently normal JS files can be loaded locally but not
+// modules!?? Conclusion: Screw Same Origin Policy, do modules manually.
+
 log = (...args) => { console.log(...args); return args ? args[0] : undefined };
 e3 = THREE;
 v = (...args) => new e3.Vector3(...args);
@@ -9,7 +15,8 @@ inDeg = rads => Math.round(360 * inTurn(rads));
 
 let data = {};
 
-// 0, 60, 120, 180 deg
+// e.g. if max_iAlpha = 3 then iAlpha = 0, 1, 2, 3
+// and alpha = 0, 60, 120, 180 deg
 const max_iAlpha = 12;
 const max_iBeta  = 12
 const max_iGamma = 24;
@@ -26,6 +33,48 @@ function lazy(obj, key, defaultVal) {
   if (obj[key] === undefined) obj[key] = defaultVal;
   return obj[key];
 }
+
+const jsonFormatDesc = {
+  a: {nested: [{
+    name: 'alpha',
+    desc: 'angle around axis 1',
+    howMany: num_iAlpha, minValue: 0, maxValue: 180, units: 'deg',
+  }, {
+    name: 'theta',
+    desc: 'angle from 0 to alpha',
+    howMany: num_iTheta, minValue: 0, maxValue: 'alpha', units: 'deg'
+  }, {
+    name: 'vectorComponent',
+    desc: "0=x (projection onto axis 1)\n" +
+          "1=y (projection onto Y axis, orthonormal to axis 1 and the Z axis)\n" +
+          "2=z (projection onto Z axis, where gamma = 90deg)",
+    minValue: 0, maxValue: 2
+  }]},
+  b: {nested: [{
+    name: 'alpha',
+    desc: 'angle around axis 1',
+    howMany: num_iAlpha, minValue: 0, maxValue: 180, units: 'deg',
+  }, {
+    name: 'beta',
+    desc: 'angle around axis 2',
+    howMany: num_iBeta, minValue: 0, maxValue: 180, units: 'deg',
+  }, {
+    name: 'gamma',
+    desc: 'angle between axis 1 and axis 2',
+    howMany: num_iGamma, minValue: 0, maxValue: 360, units: 'deg',
+  }, {
+    name: 'theta',
+    desc: 'angle from 0 to alpha',
+    howMany: num_iTheta, minValue: 0, maxValue: 'alpha', units: 'deg'
+  }, {
+    name: 'vectorComponent',
+    desc: "0=x (projection onto axis 1)\n" +
+          "1=y (projection onto Y axis, orthonormal to axis 1 and the Z axis)\n" +
+          "2=z (projection onto Z axis, where gamma = 90deg)",
+    minValue: 0, maxValue: 2
+  }]}
+};
+jsonFormatDesc.c = jsonFormatDesc.b;
 
 function declare(name, ...rest) {
   // Efficiently store computed values by parameters...
@@ -66,75 +115,19 @@ function getDrawRange(obj, iAlpha, iBeta, iGamma) {
   }
 }
 
-function exportData(objPath) {
-  objPath = objPath.split('.');
+function exportData(a_b_or_c) {
+  /*objPath = objPath.split('.');
   let o = data;
-  objPath.forEach(key => {o = o[key]});
-  const filename = objPath.join('-') + '.dat';
+  objPath.forEach(key => {o = o[key]});*/
+  const o = data.example[a_b_or_c];
+  const filename = `example-${a_b_or_c}-selfdoc.dat`;
 
-  let f32arr = new Float32Array(o.flat(4));
-  download(f32arr, filename, 'application/octet-stream');
+  // Combine generated data with machine-readable format description
+  const json = jsonFormatDesc[a_b_or_c]
+  const bytes = makeFormatAndFloatsArray(json, o.flat(4));
+  download(bytes, filename, 'application/octet-stream');
 }
 
-/*
-EXAMPLE-A.DAT
-α is the angle to rotate around the first rotation axis.
-This axis is special in that it stays in the same place and doesn't change.
-
-θ is the angle so far. As we gradually go from 0 to α around axis A,
-we sample the coordinates at angle θ, forming a visible rotation path.
-
-For each value of α, there are num_iTheta samples of θ.
-
-As there are just 2 parameters here it's straightforward to flatten:
-e.g. num α = 13 = num θ
-
-  α | θ) 0  1  2  3  4  5  6  7  8  9 10 11 12
-----|-----------------------------------------
-  0 | 0*13 01 02 03 04 05 06 07 08 09 10 11 12
-  1 | 1*13 14 15 16 17 18 19 20 21 22 23 24 25
-  α | α*13 +1 +2 +3 ...      +θ
-
-So in general, entry α,θ lives at index α*num_iTheta + θ
-And index i represents α: floor(i/num_iTheta), θ: i % num_iTheta
-
-EXAMPLE-{B,C}.DAT
-β is the angle to rotate around axis 2 (hence we depend on γ, the inter-axis
-angle), after already rotating around axis 1 (hence we depend on α).
-
-As before, θ ticks along from 0 to β. But since α and β are selected via the UI
-grid, while γ changes over time, order them as α, β, γ, θ.
-
-So for each γ within a β within an α, there are num_iTheta θ samples.
-For each β within an α, there are num_iGamma γ values, thus
-num_iGamma*num_iTheta θ samples. etc.
-
-αβγθ
-e.g. num α = num β = num γ = num θ = 3
-
- α | β | γ | θ) 0  1  2
----|---|---|-----------
- 0 | 0 | 0 |   00 01 02 | | | 3 θs per γ
- 0 | 0 | 1 |   03 04 05 | |
- 0 | 0 | 2 |   06 07 08 | | 9 = 3*3 θs per β
- 0 | 1 | 0 |   09 10 11 |
- 0 | 1 | 1 |   12 13 14 |
- 0 | 1 | 2 |   15 16 17 |
- 0 | 2 | 0 |   18 19 20 |
- 0 | 2 | 1 |   21 22 23 |
- 0 | 2 | 2 |   24 25 26 | 27 = 3*3*3 θs per α
- α | β | γ | 27α + 9β + 3γ + θ
-           = 3(3(3α + β) + γ) + θ
-
-So the index of α, β, γ, θ is
-((α * num_iBeta + β) * num_iGamma + γ) * num_iTheta + θ
-or
-α * num_iBeta * num_iGamma * num_iTheta
-          + β * num_iGamma * num_iTheta
-                       + γ * num_iTheta
-                                    + θ
-And index i represents ... er... TBA
-*/
 
 // The Example Vector is rotated in order to concretely visualize the
 // rotation paths around the first, second and composite axes.
@@ -174,10 +167,10 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
   const maxis_a = v(s_a2,0,0);
 
   // Record the rotation path of example vector around axis a
-  /*const example_rot_a = rotateUpTo(
+  const example_rot_a = rotateUpTo(
     example_vec, axis_a, 'a', alpha
-  );*/
-  const example_rot_a = rotate(example_vec, axis_a, alpha);
+  );
+  //const example_rot_a = rotate(example_vec, axis_a, alpha);
 
   // Beta is the angle around the second axis, axis b.
   for (indices[1] = 0; indices[1] <= max_iBeta; indices[1]++) {
@@ -196,7 +189,7 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
       const gamma = iGamma * dGamma;
       log(`α ${inDeg(alpha)} β ${inDeg(beta)} γ`, inDeg(gamma));
 
-      const decl = (name, value) => declare(name, value);
+      const decl = declare;
       const c_g = Math.cos(gamma);
       const s_g = Math.sin(gamma);
       const axis_b = v(c_g, 0, s_g);
@@ -204,8 +197,8 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
       //decl('maxis_b', maxis_b);
 
       // After rotating around axis a, record rotation path around axis b
-      //rotateUpTo(example_rot_a, axis_b, 'b', beta);
-      const example_rot_ab = rotate(example_rot_a, axis_b, beta);
+      const example_rot_ab = rotateUpTo(example_rot_a, axis_b, 'b', beta);
+      //const example_rot_ab = rotate(example_rot_a, axis_b, beta);
 
       // c(a/2) maxis_b + c(b/2) maxis_a
       let a_p_b = maxis_a.clone().multiplyScalar(c_b2);
