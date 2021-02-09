@@ -34,47 +34,51 @@ function lazy(obj, key, defaultVal) {
   return obj[key];
 }
 
-const jsonFormatDesc = {
-  a: {nested: [{
-    name: 'alpha',
-    desc: 'angle around axis 1',
+const makeDesc = {
+  alpha: () => ({
+    name: 'alpha', desc: 'angle around axis 1',
     howMany: num_iAlpha, minValue: 0, maxValue: 180, units: 'deg',
-  }, {
-    name: 'theta',
-    desc: 'angle from 0 to alpha',
-    howMany: num_iTheta, minValue: 0, maxValue: 'alpha', units: 'deg'
-  }, {
-    name: 'vectorComponent',
-    desc: "0=x (projection onto axis 1)\n" +
-          "1=y (projection onto Y axis, orthonormal to axis 1 and the Z axis)\n" +
-          "2=z (projection onto Z axis, where gamma = 90deg)",
-    minValue: 0, maxValue: 2
-  }]},
-  b: {nested: [{
-    name: 'alpha',
-    desc: 'angle around axis 1',
-    howMany: num_iAlpha, minValue: 0, maxValue: 180, units: 'deg',
-  }, {
-    name: 'beta',
-    desc: 'angle around axis 2',
+  }),
+  beta: () => ({
+    name: 'beta', desc: 'angle around axis 2',
     howMany: num_iBeta, minValue: 0, maxValue: 180, units: 'deg',
-  }, {
-    name: 'gamma',
-    desc: 'angle between axis 1 and axis 2',
+  }),
+  gamma: () => ({
+    name: 'gamma', desc: 'angle between axis 1 and axis 2',
     howMany: num_iGamma, minValue: 0, maxValue: 360, units: 'deg',
-  }, {
-    name: 'theta',
-    desc: 'angle from 0 to alpha',
-    howMany: num_iTheta, minValue: 0, maxValue: 'alpha', units: 'deg'
-  }, {
+  }),
+  theta: (maxValue) => ({
+    name: 'theta', desc: 'angle from 0 to '+maxValue,
+    howMany: num_iTheta, minValue: 0, maxValue, units: 'deg'
+  }),
+  xyz: () => ({
     name: 'vectorComponent',
     desc: "0=x (projection onto axis 1)\n" +
           "1=y (projection onto Y axis, orthonormal to axis 1 and the Z axis)\n" +
           "2=z (projection onto Z axis, where gamma = 90deg)",
     minValue: 0, maxValue: 2
-  }]}
+  }),
+  example: (thetaMax) => {
+    const list = [makeDesc.alpha()];
+    if (thetaMax === 'alpha') list.push(makeDesc.theta(thetaMax));
+    else list.push(makeDesc.beta(), makeDesc.gamma(), makeDesc.theta(thetaMax));
+    list.push(makeDesc.xyz());
+    return list;
+  },
+  abgx: () => [makeDesc.alpha(), makeDesc.beta(), makeDesc.gamma(), makeDesc.xyz()],
 };
-jsonFormatDesc.c = jsonFormatDesc.b;
+
+const jsonFormatDesc = {
+  example_a: {nested: makeDesc.example('alpha')},
+  example_b: {nested: makeDesc.example('beta')},
+  example_c: {nested: makeDesc.example('angle_c')},
+  maxis_b: {nested: makeDesc.abgx()},
+  angle_c: {nested: [makeDesc.alpha(), makeDesc.beta(), makeDesc.gamma()]},
+};
+jsonFormatDesc.a_p_b   = jsonFormatDesc.maxis_b;
+jsonFormatDesc.a_x_b   = jsonFormatDesc.maxis_b;
+jsonFormatDesc.maxis_c = jsonFormatDesc.maxis_b;
+jsonFormatDesc.axis_c  = jsonFormatDesc.maxis_b;
 
 function declare(name, ...rest) {
   // Efficiently store computed values by parameters...
@@ -104,26 +108,14 @@ function declare(name, ...rest) {
   }
 }
 
-// Returns [vertex number of 1st vertex, count of vertices]
-function getDrawRange(obj, iAlpha, iBeta, iGamma) {
-  if (obj === data.example.a) {
-    return [iAlpha * num_iTheta, num_iTheta];
-  } else if (obj === data.example.b || obj === data.example.c) {
-    return [ ((iAlpha * num_iBeta + iBeta) * num_iGamma + iGamma) * num_iTheta, num_iTheta ];
-  } else {
-    return [ (iAlpha * num_iBeta + iBeta) * num_iGamma, num_iGamma ];
-  }
-}
-
-function exportData(a_b_or_c) {
-  /*objPath = objPath.split('.');
+function exportData(objPath) {
+  objPath = objPath.split('.');
   let o = data;
-  objPath.forEach(key => {o = o[key]});*/
-  const o = data.example[a_b_or_c];
-  const filename = `example-${a_b_or_c}-selfdoc.dat`;
+  objPath.forEach(key => {o = o[key]});
+  const filename = objPath.join('-') + '.dat';
 
   // Combine generated data with machine-readable format description
-  const json = jsonFormatDesc[a_b_or_c]
+  const json = jsonFormatDesc[objPath.join('_')];
   const bytes = makeFormatAndFloatsArray(json, o.flat(4));
   download(bytes, filename, 'application/octet-stream');
 }
@@ -194,7 +186,7 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
       const s_g = Math.sin(gamma);
       const axis_b = v(c_g, 0, s_g);
       const maxis_b = v(s_b2*c_g, 0, s_b2*s_g);
-      //decl('maxis_b', maxis_b);
+      decl('maxis_b', maxis_b);
 
       // After rotating around axis a, record rotation path around axis b
       const example_rot_ab = rotateUpTo(example_rot_a, axis_b, 'b', beta);
@@ -203,7 +195,7 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
       // c(a/2) maxis_b + c(b/2) maxis_a
       let a_p_b = maxis_a.clone().multiplyScalar(c_b2);
       a_p_b.add(maxis_b.clone().multiplyScalar(c_a2));
-      //decl('a_p_b', a_p_b);
+      decl('a_p_b', a_p_b);
 
       const a_x_b = maxis_a.clone().cross(maxis_b);
       a_x_b.negate(); // WHY is this necessary so that rot C = rot A then B !?
@@ -211,20 +203,20 @@ for (indices[0] = 0; indices[0] <= max_iAlpha; indices[0]++) {
       // The Math Formula says that A then B maxis is (...) + a x b
       // Yet to make it WORK here it appears we need (...) + b x a
       // which would APPEAR to represent B then A rotation. Grrrrr
-      //decl('a_x_b', a_x_b);
+      decl('a_x_b', a_x_b);
 
       // maxis_(a then b) = cos(a/2)maxis_b + cos(b/2)maxis_a + maxis_a x maxis_b
       // ... is how 3D rotations are *supposed* to compose
       const maxis_c = a_p_b.add(a_x_b);
-      //decl('maxis_c', maxis_c);
+      decl('maxis_c', maxis_c);
 
       const axis_c = maxis_c.clone().normalize();
-      //decl('axis_c', axis_c);
+      decl('axis_c', axis_c);
 
       const s_c2 = maxis_c.length();
       const c_c2 = c_a2 * c_b2 - s_a2 * s_b2 * c_g;
       const angle_c = 2 * Math.atan2(s_c2, c_c2);
-      //decl('angle_c', angle_c);
+      decl('angle_c', angle_c);
 
       // Record rotation path around the composite axis
       const example_rot_c = rotateUpTo(example_vec, axis_c, 'c', angle_c);

@@ -396,13 +396,13 @@ PATH_LENGTH = 100;
 rotPathRoundA = undefined;
 rotPathRoundB = undefined;
 rotPathRoundC = undefined;
+pathMaxisC = undefined;
 
 loader = new e3.FileLoader().setResponseType('arraybuffer');
 e3.Cache.enabled = true;
 
 // Load axis A rotation data
-loader.load('http://localhost:8000/example-a-selfdoc.dat', buf => {
-  if (rotPathRoundA !== undefined) return;
+loader.load('http://localhost:8000/example-a.dat', buf => {
   const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundA = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
@@ -424,8 +424,7 @@ loader.load('http://localhost:8000/example-a-selfdoc.dat', buf => {
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
 // Load axis B rotation data
-loader.load('http://localhost:8000/example-b-selfdoc.dat', buf => {
-  if (rotPathRoundB !== undefined) return;
+loader.load('http://localhost:8000/example-b.dat', buf => {
   const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundB = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
@@ -434,6 +433,7 @@ loader.load('http://localhost:8000/example-b-selfdoc.dat', buf => {
     new e3.PointsMaterial({color: 0xff00ff, size: 0.025})
   );
   scene.add(rotPathRoundB);
+  const numVertices = schemas.byName['theta'].howMany;
   feedsInto(gridPosition, rotPathRoundB);
   updates.set(rotPathRoundB, function() {
     const iAlpha = gridPosition[0][0];
@@ -453,7 +453,6 @@ loader.load('http://localhost:8000/example-b-selfdoc.dat', buf => {
     const iStartVertex = schemas.paramsToIndex({
       alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
     });
-    const numVertices = schemas.byName['theta'].howMany;
     if (iGammaSigned < 0) {
       // A negated B axis is equivalent to negated B angle. We re-use the
       // rotation path around axis B, starting from wherever it starts at
@@ -487,8 +486,7 @@ loader.load('http://localhost:8000/example-b-selfdoc.dat', buf => {
   rotPathRoundB.geometry.setDrawRange(0,0);
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
-loader.load('http://localhost:8000/example-c-selfdoc.dat', buf => {
-  if (rotPathRoundC !== undefined) return;
+loader.load('http://localhost:8000/example-c.dat', buf => {
   const [schemas, floats] = getMeaningfulFloatArray(buf);
   rotPathRoundC = new e3.Points(
     new e3.BufferGeometry().setAttribute('position',
@@ -496,6 +494,7 @@ loader.load('http://localhost:8000/example-c-selfdoc.dat', buf => {
     ), new e3.PointsMaterial({color: 0x7f00ff, size: 0.025})
   );
   scene.add(rotPathRoundC);
+  const numVertices = schemas.byName['theta'].howMany;
   feedsInto(gridPosition, rotPathRoundC);
   updates.set(rotPathRoundC, function() {
     const iAlpha = gridPosition[0][0];
@@ -506,11 +505,33 @@ loader.load('http://localhost:8000/example-c-selfdoc.dat', buf => {
       const iStartVertex = schemas.paramsToIndex({
         alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
       });
-      const numVertices = schemas.byName['theta'].howMany;
       rotPathRoundC.geometry.setDrawRange(iStartVertex, numVertices);
     }
   });
   rotPathRoundC.geometry.setDrawRange(0,0);
+}, undefined /*progress handler*/, undefined /*error handler*/);
+
+loader.load('http://localhost:8000/maxis_c.dat', buf => {
+  const [schemas, floats] = getMeaningfulFloatArray(buf);
+  pathMaxisC = new e3.Points(
+    new e3.BufferGeometry().setAttribute('position',
+      new e3.BufferAttribute(floats, 3)
+    ), new e3.PointsMaterial({color: 0x00ff00, size: 0.025})
+  );
+  scene.add(pathMaxisC);
+  const numVertices = schemas.byName['gamma'].howMany;
+  feedsInto(gridPosition, pathMaxisC);
+  updates.set(pathMaxisC, function() {
+    const iAlpha = gridPosition[0][0];
+    const iBeta = gridPosition[0][1];
+    if (iAlpha >= 0 && iBeta >= 0) {
+      const iStartVertex = schemas.paramsToIndex({
+        alpha: iAlpha, beta: iBeta, gamma: 0
+      });
+      pathMaxisC.geometry.setDrawRange(iStartVertex, numVertices);
+    }
+  });
+  updates.get(pathMaxisC)();
 }, undefined /*progress handler*/, undefined /*error handler*/);
 
 // END HORRIBLE FILE LOADING AND ROTATION PATH TRANSFORMATION SECTION
