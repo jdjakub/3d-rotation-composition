@@ -307,6 +307,33 @@ a_p_b = newArrow('a_p_b', 0xff7700, v(1,0,1));
 scene.add(a_p_b);
 dependsOn(a_p_b, axis_a, axis_b, c_a2, c_b2);
 
+updates.set(a_p_b, function(arr) {
+  let a = asVector(axis_a).multiplyScalar(c_b2[0]);
+  let b = asVector(axis_b).multiplyScalar(c_a2[0]);
+  pointArrow(arr, a.add(b));
+});
+
+axis_c = newArrow('axis_c', 0x00ff00);
+arrowThickness(axis_c, 0.025);
+scene.add(axis_c);
+dependsOn(axis_c, a_x_b, a_p_b);
+
+updates.set(axis_c, function(arr) {
+  let x = asVector(a_x_b);
+  let p = asVector(a_p_b);
+  x.add(p);
+  pointArrow(arr, x);
+});
+
+naxis_c = newArrow('naxis_c', 0x0000ff);
+scene.add(naxis_c);
+feedsInto(axis_c, naxis_c);
+
+updates.set(naxis_c, function(arr) {
+  let c = asVector(axis_c);
+  pointArrow(arr, c.normalize());
+});
+
 // ### INDEPENDENTLY VARIABLE ANGLES UI
 
 svg = document.getElementById('angle-controls');
@@ -378,253 +405,123 @@ updates.set(angleMarker, function(circ) {
   });
 });
 
-// ### PATH TRACING
+// ### GENERATED PATH DATA LOADING AND DISPLAY
 
-pathMaterials = {};
-paths = [];
-for (let i=0; i<2*GRANULARITY+1; i++) {
-  paths[i] = []; // Row for angle a = (i-GRANULARITY)th value in grid
-  for (let j=0; j<2*GRANULARITY+1; j++)
-    paths[i][j] = {paths: {}}; // Col for angle b = (j-GRANULARITY)th value in grid
-}
-function gridDataAt([i, j]) {
-  return paths[i+GRANULARITY][j+GRANULARITY];
-}
-PATH_LENGTH = 100;
-
-// BEGIN HORRIBLE FILE LOADING AND ROTATION PATH TRANSFORMATION SECTION
-rotPathRoundA = undefined;
-rotPathRoundB = undefined;
-rotPathRoundC = undefined;
-pathMaxisC = undefined;
+paths = {};
 
 loader = new e3.FileLoader().setResponseType('arraybuffer');
 e3.Cache.enabled = true;
 
+function createPath(pathName, color, updateFunc, doInit, cont) {
+  loader.load(`http://localhost:8000/${pathName}.dat`, buf => {
+    const [schemas, floats] = getMeaningfulFloatArray(buf);
+    const path = new e3.Points(
+      new e3.BufferGeometry().setAttribute('position',
+        new e3.BufferAttribute(floats, 3)
+      ),
+      new e3.PointsMaterial({color, size: 0.025})
+    );
+    paths[pathName] = path;
+    scene.add(path);
+    feedsInto(gridPosition, path);
+    updates.set(path, updateFunc(schemas, path));
+    path.geometry.setDrawRange(0,0); // failsafe
+    if (doInit) updates.get(path)();
+    if (cont) cont(schemas, path);
+  }, undefined /*progress handler*/, undefined /*error handler*/);
+}
+
 // Load axis A rotation data
-loader.load('http://localhost:8000/example-a.dat', buf => {
-  const [schemas, floats] = getMeaningfulFloatArray(buf);
-  rotPathRoundA = new e3.Points(
-    new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(floats, 3)
-    ),
-    new e3.PointsMaterial({color: 0xff7fff, size: 0.025})
-  );
-  scene.add(rotPathRoundA);
-  feedsInto(gridPosition, rotPathRoundA);
-  updates.set(rotPathRoundA, function() {
-    const iAlpha = gridPosition[0][0];
-    if (iAlpha >= 0) {
-      const iStartVertex = schemas.paramsToIndex({ alpha: iAlpha, theta: 0 });
-      const numVertices = schemas.byName['theta'].howMany;
-      rotPathRoundA.geometry.setDrawRange(iStartVertex, numVertices);
-    }
-  });
-  updates.get(rotPathRoundA)();
-}, undefined /*progress handler*/, undefined /*error handler*/);
+createPath('example-a', 0xff7fff, (schemas, path) => {
+const numVertices = schemas.byName['theta'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  if (iAlpha >= 0) {
+    const iStartVertex = schemas.paramsToIndex({ alpha: iAlpha, theta: 0 });
+    path.geometry.setDrawRange(iStartVertex, numVertices);
+  }
+}}, true);
 
 // Load axis B rotation data
-loader.load('http://localhost:8000/example-b.dat', buf => {
-  const [schemas, floats] = getMeaningfulFloatArray(buf);
-  rotPathRoundB = new e3.Points(
-    new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(floats, 3)
-    ),
-    new e3.PointsMaterial({color: 0xff00ff, size: 0.025})
-  );
-  scene.add(rotPathRoundB);
-  const numVertices = schemas.byName['theta'].howMany;
-  feedsInto(gridPosition, rotPathRoundB);
-  updates.set(rotPathRoundB, function() {
-    const iAlpha = gridPosition[0][0];
-    const iBeta = gridPosition[0][1];
-    let iGammaSigned = iaaQuantized;
-    if (iGammaSigned > 12) iGammaSigned -= 24; // -11 to 12
-    let iGamma = iGammaSigned;
-    let startVertexNo;
-    // Want to incorporate the symmetry that when gamma (the angle between axes
-    // A and B) = 180+x, axis B is simply negated from when gamma = +x,
-    // a.k.a. negated angle B.
-    // As iaaQuantized goes from 0 to 24, iGammaSigned goes from 0 to 12,
-    // then -11 up to 0.
-    // At, say, iaaQuantized=13, iGammaSigned=-11, we want to re-use the
-    // computed data for iGamma = +1.
-    if (iGammaSigned < 0) iGamma += 12; // so -11 -> 1, -10 -> 2 etc
+createPath('example-b', 0xff00ff, (schemas, path) => {
+const numVertices = schemas.byName['theta'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  const iBeta = gridPosition[0][1];
+  let iGammaSigned = iaaQuantized;
+  if (iGammaSigned > 12) iGammaSigned -= 24; // -11 to 12
+  let iGamma = iGammaSigned;
+  let startVertexNo;
+  // Want to incorporate the symmetry that when gamma (the angle between axes
+  // A and B) = 180+x, axis B is simply negated from when gamma = +x,
+  // a.k.a. negated angle B.
+  // As iaaQuantized goes from 0 to 24, iGammaSigned goes from 0 to 12,
+  // then -11 up to 0.
+  // At, say, iaaQuantized=13, iGammaSigned=-11, we want to re-use the
+  // computed data for iGamma = +1.
+  if (iGammaSigned < 0) iGamma += 12; // so -11 -> 1, -10 -> 2 etc
+  const iStartVertex = schemas.paramsToIndex({
+    alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
+  });
+  if (iGammaSigned < 0) {
+    // A negated B axis is equivalent to negated B angle. We re-use the
+    // rotation path around axis B, starting from wherever it starts at
+    // theta=0. If it's clockwise, we need to reflect it to be anti-CW, and
+    // vice versa; still starting from the same theta=0 position.
+    const i = startVertexNo;
+    const va = path.geometry.getAttribute('position');
+    let posAtTheta0 = v(va.getX(i), va.getY(i), va.getZ(i));
+    let r = posAtTheta0.cross(asVector(axis_b)).normalize();
+    // The origin-theta0-theta180 plane is the plane of symmetry. Each pos p
+    // on the rotation path transforms to: p - 2(p.n)n, where n is the plane
+    // normal.
+    // Rewritten Ip - 2n(n^T p) = (I - 2nn^T)p
+    // I - 2nn^T is the reflection matrix; I=identity, n^T = transpose of n.
+    // TODO: This diverges slightly from the C data. Investigate
+    path.matrix.set(
+      1 - 2*r.x*r.x,   - 2*r.x*r.y,   - 2*r.x*r.z, 0,
+        - 2*r.x*r.y, 1 - 2*r.y*r.y,   - 2*r.y*r.z, 0,
+        - 2*r.x*r.z,   - 2*r.y*r.z, 1 - 2*r.z*r.z, 0,
+                0,           0,           0, 1
+    );
+    path.matrixAutoUpdate = false;
+  } else {
+    //log('Positive');
+    path.matrix.identity();
+    path.matrixAutoUpdate = true;
+  }
+  if (iAlpha >= 0 && iBeta >= 0)
+    path.geometry.setDrawRange(iStartVertex, numVertices);
+}});
+
+createPath('example-c', 0x7f00ff, (schemas, path) => {
+const numVertices = schemas.byName['theta'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  const iBeta = gridPosition[0][1];
+  let iGamma = iaaQuantized;
+  log(iGamma);
+  if (iAlpha >= 0 && iBeta >= 0) {
     const iStartVertex = schemas.paramsToIndex({
       alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
     });
-    if (iGammaSigned < 0) {
-      // A negated B axis is equivalent to negated B angle. We re-use the
-      // rotation path around axis B, starting from wherever it starts at
-      // theta=0. If it's clockwise, we need to reflect it to be anti-CW, and
-      // vice versa; still starting from the same theta=0 position.
-      const i = startVertexNo;
-      const va = rotPathRoundB.geometry.getAttribute('position');
-      let posAtTheta0 = v(va.getX(i), va.getY(i), va.getZ(i));
-      let r = posAtTheta0.cross(asVector(axis_b)).normalize();
-      // The origin-theta0-theta180 plane is the plane of symmetry. Each pos p
-      // on the rotation path transforms to: p - 2(p.n)n, where n is the plane
-      // normal.
-      // Rewritten Ip - 2n(n^T p) = (I - 2nn^T)p
-      // I - 2nn^T is the reflection matrix; I=identity, n^T = transpose of n.
-      // TODO: This diverges slightly from the C data. Investigate
-      rotPathRoundB.matrix.set(
-        1 - 2*r.x*r.x,   - 2*r.x*r.y,   - 2*r.x*r.z, 0,
-          - 2*r.x*r.y, 1 - 2*r.y*r.y,   - 2*r.y*r.z, 0,
-          - 2*r.x*r.z,   - 2*r.y*r.z, 1 - 2*r.z*r.z, 0,
-                  0,           0,           0, 1
-      );
-      rotPathRoundB.matrixAutoUpdate = false;
-    } else {
-      //log('Positive');
-      rotPathRoundB.matrix.identity();
-      rotPathRoundB.matrixAutoUpdate = true;
-    }
-    if (iAlpha >= 0 && iBeta >= 0)
-      rotPathRoundB.geometry.setDrawRange(iStartVertex, numVertices);
-  });
-  rotPathRoundB.geometry.setDrawRange(0,0);
-}, undefined /*progress handler*/, undefined /*error handler*/);
-
-loader.load('http://localhost:8000/example-c.dat', buf => {
-  const [schemas, floats] = getMeaningfulFloatArray(buf);
-  rotPathRoundC = new e3.Points(
-    new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(floats, 3)
-    ), new e3.PointsMaterial({color: 0x7f00ff, size: 0.025})
-  );
-  scene.add(rotPathRoundC);
-  const numVertices = schemas.byName['theta'].howMany;
-  feedsInto(gridPosition, rotPathRoundC);
-  updates.set(rotPathRoundC, function() {
-    const iAlpha = gridPosition[0][0];
-    const iBeta = gridPosition[0][1];
-    let iGamma = iaaQuantized;
-    log(iGamma);
-    if (iAlpha >= 0 && iBeta >= 0) {
-      const iStartVertex = schemas.paramsToIndex({
-        alpha: iAlpha, beta: iBeta, gamma: iGamma, theta: 0
-      });
-      rotPathRoundC.geometry.setDrawRange(iStartVertex, numVertices);
-    }
-  });
-  rotPathRoundC.geometry.setDrawRange(0,0);
-}, undefined /*progress handler*/, undefined /*error handler*/);
-
-loader.load('http://localhost:8000/maxis_c.dat', buf => {
-  const [schemas, floats] = getMeaningfulFloatArray(buf);
-  pathMaxisC = new e3.Points(
-    new e3.BufferGeometry().setAttribute('position',
-      new e3.BufferAttribute(floats, 3)
-    ), new e3.PointsMaterial({color: 0x00ff00, size: 0.025})
-  );
-  scene.add(pathMaxisC);
-  const numVertices = schemas.byName['gamma'].howMany;
-  feedsInto(gridPosition, pathMaxisC);
-  updates.set(pathMaxisC, function() {
-    const iAlpha = gridPosition[0][0];
-    const iBeta = gridPosition[0][1];
-    if (iAlpha >= 0 && iBeta >= 0) {
-      const iStartVertex = schemas.paramsToIndex({
-        alpha: iAlpha, beta: iBeta, gamma: 0
-      });
-      pathMaxisC.geometry.setDrawRange(iStartVertex, numVertices);
-    }
-  });
-  updates.get(pathMaxisC)();
-}, undefined /*progress handler*/, undefined /*error handler*/);
-
-// END HORRIBLE FILE LOADING AND ROTATION PATH TRANSFORMATION SECTION
-
-currPathSet = [ gridDataAt(gridPosition[0]).paths ];
-feedsInto(gridPosition, currPathSet);
-updates.set(currPathSet, function() {
-  Object.entries(currPathSet[0]).forEach(([k,p]) => {
-    scene.remove(p);
-  });
-  currPathSet[0] = gridDataAt(gridPosition[0]).paths;
-});
-
-updates.set(a_p_b, function(arr) {
-  let a = asVector(axis_a).multiplyScalar(c_b2[0]);
-  let b = asVector(axis_b).multiplyScalar(c_a2[0]);
-  pointArrow(arr, a.add(b));
-  tracePath('p_path', a, 0xff7700, PATH_LENGTH);
-});
-
-function tracePath(name, currPos, color, pathLen) {
-  return;
-  let activePaths = gridDataAt(gridPosition[0]).paths;
-  let path = activePaths[name];
-  if (path === undefined) {
-    let mat = pathMaterials[color];
-    if (mat === undefined)
-      pathMaterials[color] = mat = new e3.PointsMaterial({ color, size: 0.025 });
-
-    activePaths[name] = path = new e3.Points(
-      new e3.BufferGeometry().setAttribute('position',
-        new e3.BufferAttribute(
-          new Float32Array(pathLen*3), 3
-        ).setUsage(e3.DynamicDrawUsage)
-      ), mat);
-    path.geometry.setDrawRange(0, 0);
-    path.angleAtStart = interAxisAngle;
-    path.prevAngleValue = 0;
-    path.finishedTrace = false;
+    path.geometry.setDrawRange(iStartVertex, numVertices);
   }
-  if (path.parent !== scene) {
-    scene.add(path);
+}});
+
+createPath('maxis_c', 0x00ff00, (schemas, path) => {
+const numVertices = schemas.byName['gamma'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  const iBeta = gridPosition[0][1];
+  if (iAlpha >= 0 && iBeta >= 0) {
+    const iStartVertex = schemas.paramsToIndex({
+      alpha: iAlpha, beta: iBeta, gamma: 0
+    });
+    path.geometry.setDrawRange(iStartVertex, numVertices);
   }
-
-  if (path.finishedTrace) return;
-
-  // Figure out whether we've covered a full turn from when we started tracing
-  let angleSoFar = (interAxisAngle-path.angleAtStart + 360) % 360;
-  if (angleSoFar < path.prevAngleValue) {
-    path.finishedTrace = true;
-  } else
-    path.prevAngleValue = angleSoFar;
-
-  // Fill in geometry
-  let geom = path.geometry;
-  let currPathLen = geom.drawRange.count;
-  let ps = geom.getAttribute('position');
-
-  if (currPathLen < pathLen) {
-
-    let cpl1 = currPathLen-1;
-    if (currPathLen > 0) {
-      let prevPos = v(ps.getX(cpl1), ps.getY(cpl1), ps.getZ(cpl1));
-      if (prevPos.distanceTo(currPos) < 0.04) return;
-    }
-    ps.setXYZ(currPathLen, currPos.x, currPos.y, currPos.z);
-    ps.needsUpdate = true;
-    ps.updateRange = { offset: currPathLen*3, count: 3 };
-    geom.setDrawRange(0, currPathLen+1);
-  }
-}
-
-axis_c = newArrow('axis_c', 0x00ff00);
-arrowThickness(axis_c, 0.025);
-scene.add(axis_c);
-dependsOn(axis_c, a_x_b, a_p_b);
-
-updates.set(axis_c, function(arr) {
-  let x = asVector(a_x_b);
-  let p = asVector(a_p_b);
-  x.add(p);
-  pointArrow(arr, x);
-  tracePath('c_path', x, 0x00ff00, PATH_LENGTH);
-});
-
-naxis_c = newArrow('naxis_c', 0x0000ff);
-scene.add(naxis_c);
-feedsInto(axis_c, naxis_c);
-
-updates.set(naxis_c, function(arr) {
-  let c = asVector(axis_c);
-  pointArrow(arr, c.normalize());
-  tracePath('path_nc', c, 0x0000ff, PATH_LENGTH);
+}}, true, path => {
+  paths['maxis_c'].scale.set(1,1,-1); // TODO: WHY ARE Z COORDS WRONG SIGN...??
 });
 
 // ### SPHERE, CAMERA, LIGHTS
@@ -658,13 +555,14 @@ function tick(deltaS) {
   viz(interAxisAngle);
   prev_iaaQuantized = iaaQuantized;
   iaaQuantized = Math.round((interAxisAngle)/15); // 0 to 24
-  if (rotPathRoundB !== undefined) {
-    if (prev_iaaQuantized !== iaaQuantized) {
-      let f = updates.get(rotPathRoundB); if (f) f();
-      f = updates.get(rotPathRoundC); if (f) f();
-    }
+  if (prev_iaaQuantized !== iaaQuantized) { // TODO: this  updating is kludgy
+    let f, path;
+    path = paths['example-b'];
+    if (path) { f = updates.get(path); if (f) f(); }
+    path = paths['example-c'];
+    if (path) { f = updates.get(path); if (f) f(); }
   }
-  tracePath('b_path', asVector(axis_b), 0xff0000, PATH_LENGTH);
+  
   interAxisAngle += degPerS * deltaS;
   interAxisAngle = interAxisAngle % 360;
 }
