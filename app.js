@@ -524,6 +524,36 @@ return () => {
   paths['maxis_c'].scale.set(1,1,-1); // TODO: WHY ARE Z COORDS WRONG SIGN...??
 });
 
+createPath('axis_c', 0x0000ff, (schemas, path) => {
+const numVertices = schemas.byName['gamma'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  const iBeta = gridPosition[0][1];
+  if (iAlpha >= 0 && iBeta >= 0) {
+    const iStartVertex = schemas.paramsToIndex({
+      alpha: iAlpha, beta: iBeta, gamma: 0
+    });
+    path.geometry.setDrawRange(iStartVertex, numVertices);
+  }
+}}, true, path => {
+  paths['axis_c'].scale.set(1,1,-1); // TODO: WHY ARE Z COORDS WRONG SIGN...??
+});
+
+createPath('a_p_b', 0xff7700, (schemas, path) => {
+const numVertices = schemas.byName['gamma'].howMany;
+return () => {
+  const iAlpha = gridPosition[0][0];
+  const iBeta = gridPosition[0][1];
+  if (iAlpha >= 0 && iBeta >= 0) {
+    const iStartVertex = schemas.paramsToIndex({
+      alpha: iAlpha, beta: iBeta, gamma: 0
+    });
+    path.geometry.setDrawRange(iStartVertex, numVertices);
+  }
+}}, true, path => {
+  //paths['axis_c'].scale.set(1,1,-1); // TODO: WHY ARE Z COORDS WRONG SIGN...??
+});
+
 // ### SPHERE, CAMERA, LIGHTS
 
 scene.add(newMesh('sphere', new e3.SphereBufferGeometry(1, 48, 48),
@@ -562,7 +592,7 @@ function tick(deltaS) {
     path = paths['example-c'];
     if (path) { f = updates.get(path); if (f) f(); }
   }
-  
+
   interAxisAngle += degPerS * deltaS;
   interAxisAngle = interAxisAngle % 360;
 }
